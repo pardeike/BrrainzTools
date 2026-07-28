@@ -2,7 +2,7 @@
 set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-product_name="regionshot"
+product_name="brrainztools"
 version="${VERSION:-}"
 output_root="${OUTPUT_ROOT:-$project_dir/output/release}"
 build_dir="$project_dir/.build/release-dmg"
@@ -14,10 +14,10 @@ if [[ -z "$version" ]]; then
 fi
 
 safe_version="$(printf '%s' "$version" | tr -c 'A-Za-z0-9._-' '-')"
-release_dir="$output_root/RegionShot-$safe_version"
+release_dir="$output_root/BrrainzTools-$safe_version"
 staging_dir="$release_dir/staging"
-payload_dir="$staging_dir/RegionShot"
-dmg_path="$release_dir/RegionShot-$safe_version-macos.dmg"
+payload_dir="$staging_dir/BrrainzTools"
+dmg_path="$release_dir/BrrainzTools-$safe_version-macos.dmg"
 
 identity="${CODESIGN_IDENTITY:-}"
 if [[ -z "$identity" ]]; then
@@ -35,8 +35,8 @@ if [[ -z "$identity" ]]; then
 fi
 
 rm -rf "$release_dir"
-mkdir -p "$payload_dir/.regionshot-support"
-printf '%s\n' "$version" > "$payload_dir/.regionshot-support/VERSION"
+mkdir -p "$payload_dir/.brrainztools-support"
+printf '%s\n' "$version" > "$payload_dir/.brrainztools-support/VERSION"
 
 swift build \
   --package-path "$project_dir" \
@@ -45,35 +45,36 @@ swift build \
   --build-path "$build_dir"
 
 /usr/bin/install -m 755 "$build_dir/release/$product_name" "$payload_dir/$product_name"
-ditto "$project_dir/AgentSupport" "$payload_dir/.regionshot-support/AgentSupport"
+ditto "$project_dir/AgentSupport" "$payload_dir/.brrainztools-support/AgentSupport"
 /usr/bin/install -m 644 "$project_dir/README.md" "$payload_dir/README.md"
 if [[ -d "$project_dir/docs" ]]; then
   ditto "$project_dir/docs" "$payload_dir/docs"
 fi
 
-cat > "$payload_dir/Install RegionShot.command" <<'INSTALL_SCRIPT'
+cat > "$payload_dir/Install BrrainzTools.command" <<'INSTALL_SCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
 
 source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 install_dir="${INSTALL_DIR:-$HOME/Scripts}"
-support_root="$install_dir/.regionshot-support"
+support_root="$install_dir/.brrainztools-support"
 
 mkdir -p "$install_dir" "$support_root"
-/usr/bin/install -m 755 "$source_dir/regionshot" "$install_dir/regionshot"
-rm -rf "$support_root/AgentSupport" "$support_root/Codex"
-ditto "$source_dir/.regionshot-support/AgentSupport" "$support_root/AgentSupport"
-if [[ -f "$source_dir/.regionshot-support/VERSION" ]]; then
-  /usr/bin/install -m 644 "$source_dir/.regionshot-support/VERSION" "$support_root/VERSION"
+/usr/bin/install -m 755 "$source_dir/brrainztools" "$install_dir/brrainztools"
+rm -rf "$support_root/AgentSupport"
+rm -rf "$install_dir/regionshot" "$install_dir/.regionshot-support"
+ditto "$source_dir/.brrainztools-support/AgentSupport" "$support_root/AgentSupport"
+if [[ -f "$source_dir/.brrainztools-support/VERSION" ]]; then
+  /usr/bin/install -m 644 "$source_dir/.brrainztools-support/VERSION" "$support_root/VERSION"
 fi
 
-echo "Installed regionshot to $install_dir/regionshot"
+echo "Installed brrainztools to $install_dir/brrainztools"
 echo "Installed agent support files to $support_root/AgentSupport"
 echo
 echo "If needed, add this to ~/.zprofile:"
 echo "export PATH=\"\$HOME/Scripts:\$PATH\""
 INSTALL_SCRIPT
-chmod 755 "$payload_dir/Install RegionShot.command"
+chmod 755 "$payload_dir/Install BrrainzTools.command"
 
 codesign \
   --force \
@@ -85,7 +86,7 @@ codesign --verify --verbose "$payload_dir/$product_name"
 spctl --assess --type execute --verbose "$payload_dir/$product_name" || true
 
 hdiutil create \
-  -volname "RegionShot $version" \
+  -volname "BrrainzTools $version" \
   -srcfolder "$payload_dir" \
   -ov \
   -format UDZO \

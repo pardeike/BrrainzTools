@@ -2,12 +2,12 @@
 set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-product_name="regionshot"
+product_name="brrainztools"
 install_dir="${INSTALL_DIR:-$HOME/Scripts}"
 build_dir="$project_dir/.build/install"
 target_path="$install_dir/$product_name"
 support_source_dir="$project_dir/AgentSupport"
-support_root_dir="$install_dir/.regionshot-support"
+support_root_dir="$install_dir/.brrainztools-support"
 support_target_dir="$support_root_dir/AgentSupport"
 version="${VERSION:-}"
 
@@ -47,7 +47,8 @@ if [[ ! -f "$target_path" ]]; then
   exit 1
 fi
 
-rm -rf "$support_target_dir" "$support_root_dir/Codex"
+rm -rf "$support_target_dir"
+rm -rf "$install_dir/regionshot" "$install_dir/.regionshot-support"
 mkdir -p "$support_root_dir"
 ditto "$support_source_dir" "$support_target_dir"
 printf '%s\n' "$version" > "$support_root_dir/VERSION"

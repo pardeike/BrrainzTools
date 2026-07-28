@@ -2,9 +2,9 @@ import CoreGraphics
 import Foundation
 import Vision
 import XCTest
-@testable import RegionShot
+@testable import BrrainzTools
 
-final class RegionShotTests: XCTestCase {
+final class BrrainzToolsTests: XCTestCase {
     func testFindAppParsing() throws {
         let behavior = try parse(arguments: ["--find-app", "RimWorld"])
 
@@ -38,14 +38,14 @@ final class RegionShotTests: XCTestCase {
             return XCTFail("Expected focused help behavior.")
         }
 
-        XCTAssertTrue(text.contains("regionshot capture"))
+        XCTAssertTrue(text.contains("brrainztools capture"))
 
         let doctorBehavior = try parse(arguments: ["doctor", "--help"])
         guard case .showHelpText(let doctorText) = doctorBehavior else {
             return XCTFail("Expected doctor help behavior.")
         }
 
-        XCTAssertTrue(doctorText.contains("regionshot doctor"))
+        XCTAssertTrue(doctorText.contains("brrainztools doctor"))
     }
 
     func testCaptureSubcommandForwardsToLegacyCaptureParser() throws {
@@ -870,7 +870,7 @@ final class RegionShotTests: XCTestCase {
         XCTAssertTrue(message.contains("macOS exposed no visible windows"))
         XCTAssertTrue(message.contains("`--visible-window` only targets visible app windows."))
         XCTAssertTrue(message.contains("Use `--list-menu-bar-items` and `--capture-menu`"))
-        XCTAssertTrue(message.contains("rectangle capture (`regionshot X Y WIDTH HEIGHT`)"))
+        XCTAssertTrue(message.contains("rectangle capture (`brrainztools X Y WIDTH HEIGHT`)"))
     }
 
     func testWindowlessApplicationMessageOmitsEmptyBundleIdentifier() {
@@ -1736,7 +1736,7 @@ final class RegionShotTests: XCTestCase {
     }
 
     func testScreenRegionCapturePreflightsBeforeRunningDisplayCapture() async throws {
-        let outputURL = URL(fileURLWithPath: "/tmp/regionshot-unit-test.png")
+        let outputURL = URL(fileURLWithPath: "/tmp/brrainztools-unit-test.png")
         var events: [String] = []
 
         try await captureScreenRegion(
@@ -1761,7 +1761,7 @@ final class RegionShotTests: XCTestCase {
     }
 
     func testScreenRegionCaptureDoesNotRunDisplayCaptureWhenPreflightFails() async {
-        let outputURL = URL(fileURLWithPath: "/tmp/regionshot-unit-test.png")
+        let outputURL = URL(fileURLWithPath: "/tmp/brrainztools-unit-test.png")
         var events: [String] = []
 
         await XCTAssertThrowsErrorAsync({
@@ -1770,7 +1770,7 @@ final class RegionShotTests: XCTestCase {
                 outputURL: outputURL,
                 ensureAccess: {
                     events.append("preflight")
-                    throw RegionShotError.capturePermissionDenied
+                    throw BrrainzToolsError.capturePermissionDenied
                 },
                 runCapture: { _, _ in
                     XCTFail("display capture should not run after preflight failure.")
@@ -1781,7 +1781,7 @@ final class RegionShotTests: XCTestCase {
                 }
             )
         }) { error in
-            guard case RegionShotError.capturePermissionDenied = error else {
+            guard case BrrainzToolsError.capturePermissionDenied = error else {
                 return XCTFail("Expected capturePermissionDenied, got \(error).")
             }
         }
@@ -1836,8 +1836,8 @@ final class RegionShotTests: XCTestCase {
         )
     }
 
-    func testRegionShotErrorExitCodesDistinguishActionableFailureFamilies() {
-        let expectations: [(RegionShotError, Int32)] = [
+    func testBrrainzToolsErrorExitCodesDistinguishActionableFailureFamilies() {
+        let expectations: [(BrrainzToolsError, Int32)] = [
             (.invalidArguments("bad flag"), 64),
             (.invalidInteger(flag: "--width", value: "wide"), 64),
             (.invalidRegion("bad rectangle"), 64),
@@ -2156,6 +2156,104 @@ final class RegionShotTests: XCTestCase {
         XCTAssertFalse(isExcludedRelativePath("references/usage.md", prefixes: prefixes))
     }
 
+    func testUpdatedAgentsContentsReplacesLegacyRegionshotManagedBlock() {
+        let existingContents = """
+        # User Environment Notes
+
+        <!-- regionshot-managed:start -->
+        - Use the `regionshot` skill and the `regionshot` command on PATH.
+        - Prefer `regionshot --help` for exact command syntax.
+        <!-- regionshot-managed:end -->
+
+        # Unrelated user notes
+
+        - keep me
+        """
+        let managedBlock = """
+        <!-- brrainztools-managed:start -->
+        - Use the `brrainztools` skill and the `brrainztools` command on PATH.
+        <!-- brrainztools-managed:end -->
+        """
+
+        let updatedContents = updatedAgentsContents(
+            from: existingContents,
+            managedBlock: managedBlock,
+            legacyPointerBody: "- Use the `brrainztools` skill and the `brrainztools` command on PATH."
+        )
+
+        XCTAssertFalse(updatedContents.contains("regionshot"))
+        XCTAssertEqual(
+            updatedContents.components(separatedBy: "<!-- brrainztools-managed:start -->").count,
+            2,
+            "Expected exactly one managed block."
+        )
+        XCTAssertTrue(updatedContents.contains("- keep me"))
+        XCTAssertTrue(updatedContents.contains("- Use the `brrainztools` skill and the `brrainztools` command on PATH."))
+    }
+
+    func testUpdatedAgentsContentsMigrationIsIdempotent() {
+        let existingContents = """
+        # User Environment Notes
+
+        <!-- regionshot-managed:start -->
+        - Use the `regionshot` skill.
+        <!-- regionshot-managed:end -->
+        """
+        let managedBlock = """
+        <!-- brrainztools-managed:start -->
+        - Use the `brrainztools` skill.
+        <!-- brrainztools-managed:end -->
+        """
+        let pointerBody = "- Use the `brrainztools` skill."
+
+        let migratedContents = updatedAgentsContents(
+            from: existingContents,
+            managedBlock: managedBlock,
+            legacyPointerBody: pointerBody
+        )
+        let remigratedContents = updatedAgentsContents(
+            from: migratedContents,
+            managedBlock: managedBlock,
+            legacyPointerBody: pointerBody
+        )
+
+        XCTAssertEqual(migratedContents, remigratedContents)
+        XCTAssertFalse(migratedContents.contains("regionshot"))
+    }
+
+    func testUpdatedAgentsContentsRemovesDuplicatedLegacyBlocks() {
+        let legacyBlock = """
+        <!-- regionshot-managed:start -->
+        - Use the `regionshot` skill.
+        <!-- regionshot-managed:end -->
+        """
+        let existingContents = """
+        # User Environment Notes
+
+        \(legacyBlock)
+
+        \(legacyBlock)
+        """
+        let managedBlock = """
+        <!-- brrainztools-managed:start -->
+        - Use the `brrainztools` skill.
+        <!-- brrainztools-managed:end -->
+        """
+
+        let updatedContents = updatedAgentsContents(
+            from: existingContents,
+            managedBlock: managedBlock,
+            legacyPointerBody: "- Use the `brrainztools` skill."
+        )
+
+        XCTAssertFalse(updatedContents.contains("regionshot"))
+        XCTAssertEqual(
+            updatedContents.components(separatedBy: "<!-- brrainztools-managed:start -->").count,
+            2,
+            "Expected exactly one managed block."
+        )
+    }
+
     func testStringifyAXAttributeValueNormalizesCommonStateValues() {
         XCTAssertEqual(stringifyAXAttributeValue("  Hello\nWorld  "), "Hello World")
         XCTAssertEqual(stringifyAXAttributeValue(NSAttributedString(string: "Styled")), "Styled")
@@ -2238,9 +2336,9 @@ final class RegionShotTests: XCTestCase {
         }
     }
 
-    func testRegionShotVersionPrefersEnvironmentOverride() {
-        let version = regionShotVersion(
-            environment: ["REGIONSHOT_VERSION": " 2.0.0 \n"],
+    func testBrrainzToolsVersionPrefersEnvironmentOverride() {
+        let version = brrainzToolsVersion(
+            environment: ["BRRAINZTOOLS_VERSION": " 2.0.0 \n"],
             executableDirectory: URL(fileURLWithPath: "/tmp/bin", isDirectory: true),
             currentDirectoryURL: URL(fileURLWithPath: "/tmp/repo", isDirectory: true),
             readTextFile: { _ in "1.0.0" },
@@ -2250,12 +2348,12 @@ final class RegionShotTests: XCTestCase {
         XCTAssertEqual(version, "2.0.0")
     }
 
-    func testRegionShotVersionReadsInstalledSupportFile() {
+    func testBrrainzToolsVersionReadsInstalledSupportFile() {
         let executableDirectory = URL(fileURLWithPath: "/tmp/bin", isDirectory: true)
         var gitDescribeWasCalled = false
         var requestedURLs: [URL] = []
 
-        let version = regionShotVersion(
+        let version = brrainzToolsVersion(
             environment: [:],
             executableDirectory: executableDirectory,
             currentDirectoryURL: URL(fileURLWithPath: "/tmp/repo", isDirectory: true),
@@ -2274,24 +2372,24 @@ final class RegionShotTests: XCTestCase {
             requestedURLs,
             [
                 executableDirectory
-                    .appendingPathComponent(".regionshot-support", isDirectory: true)
+                    .appendingPathComponent(".brrainztools-support", isDirectory: true)
                     .appendingPathComponent("VERSION"),
             ]
         )
         XCTAssertFalse(gitDescribeWasCalled)
     }
 
-    func testRegionShotVersionUsesGitDescribeOnlyForRegionShotRepository() {
-        let repositoryURL = URL(fileURLWithPath: "/tmp/RegionShot", isDirectory: true)
+    func testBrrainzToolsVersionUsesGitDescribeOnlyForBrrainzToolsRepository() {
+        let repositoryURL = URL(fileURLWithPath: "/tmp/BrrainzTools", isDirectory: true)
         var requestedGitDescribeURLs: [URL] = []
 
-        let gitVersion = regionShotVersion(
+        let gitVersion = brrainzToolsVersion(
             environment: [:],
             executableDirectory: nil,
             currentDirectoryURL: repositoryURL.appendingPathComponent("docs", isDirectory: true),
             readTextFile: { url in
                 if url.path == repositoryURL.appendingPathComponent("Package.swift").path {
-                    return #"let package = Package(name: "RegionShot")"#
+                    return #"let package = Package(name: "BrrainzTools")"#
                 }
 
                 return nil
@@ -2306,10 +2404,10 @@ final class RegionShotTests: XCTestCase {
         XCTAssertEqual(requestedGitDescribeURLs, [repositoryURL])
     }
 
-    func testRegionShotVersionIgnoresForeignRepositoryGitDescribe() {
+    func testBrrainzToolsVersionIgnoresForeignRepositoryGitDescribe() {
         var gitDescribeWasCalled = false
 
-        let fallbackVersion = regionShotVersion(
+        let fallbackVersion = brrainzToolsVersion(
             environment: [:],
             executableDirectory: nil,
             currentDirectoryURL: URL(fileURLWithPath: "/tmp/DecompilerServer", isDirectory: true),
@@ -2326,7 +2424,7 @@ final class RegionShotTests: XCTestCase {
             }
         )
 
-        XCTAssertEqual(fallbackVersion, "v1.1.2")
+        XCTAssertEqual(fallbackVersion, "v2.0.0")
         XCTAssertFalse(gitDescribeWasCalled)
     }
 
@@ -2736,7 +2834,7 @@ final class RegionShotTests: XCTestCase {
                 }
             )
             XCTFail("Expected timeout.")
-        } catch RegionShotError.operationTimedOut(let message) {
+        } catch BrrainzToolsError.operationTimedOut(let message) {
             XCTAssertEqual(message, "timed out")
             XCTAssertLessThan(Date().timeIntervalSince(start), 0.5)
         }
@@ -2783,7 +2881,7 @@ private func makeGrayscaleImage(width: Int, height: Int, pixels: [UInt8]) throws
             intent: .defaultIntent
         )
     else {
-        throw RegionShotError.captureFailed("Failed to create test image.")
+        throw BrrainzToolsError.captureFailed("Failed to create test image.")
     }
 
     return image

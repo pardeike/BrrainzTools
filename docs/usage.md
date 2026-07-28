@@ -1,19 +1,19 @@
-# RegionShot Command Guide
+# BrrainzTools Command Guide
 
-This page lists the main command forms. Run `regionshot --help` for the
-subcommand index, or `regionshot <subcommand> --help` for focused help from the
+This page lists the main command forms. Run `brrainztools --help` for the
+subcommand index, or `brrainztools <subcommand> --help` for focused help from the
 installed binary. Existing flag-first forms still work as compatibility aliases.
 
 ## Subcommands
 
 ```bash
-regionshot capture 120 240 800 600
-regionshot apps Terminal
-regionshot windows --app Terminal --visible
-regionshot ax --app Terminal tree --depth 2
-regionshot menu --app Drafty list
-regionshot ascii /tmp/screenshot.png --ocr-only
-regionshot displays
+brrainztools capture 120 240 800 600
+brrainztools apps Terminal
+brrainztools windows --app Terminal --visible
+brrainztools ax --app Terminal tree --depth 2
+brrainztools menu --app Drafty list
+brrainztools ascii /tmp/screenshot.png --ocr-only
+brrainztools displays
 ```
 
 ## Output
@@ -33,24 +33,24 @@ legacy bare path or report output. `--raw` cannot be combined with
 ## Version
 
 ```bash
-regionshot --version
+brrainztools --version
 ```
 
 ## Doctor
 
 ```bash
-regionshot doctor
+brrainztools doctor
 ```
 
 `doctor` returns non-prompting Screen Recording and Accessibility permission
-status, the RegionShot version, and the parent host process that macOS
+status, the BrrainzTools version, and the parent host process that macOS
 permissions apply to.
 
 ## Clipboard
 
 ```bash
-regionshot clipboard
-regionshot clipboard --set "copied text"
+brrainztools clipboard
+brrainztools clipboard --set "copied text"
 ```
 
 `clipboard` reads or sets plain text on the general pasteboard and returns the
@@ -59,12 +59,12 @@ clipboard payload as `data`.
 ## App Lifecycle
 
 ```bash
-regionshot activate --app "System Settings"
-regionshot activate --pid 12345
-regionshot launch com.apple.TextEdit --wait-window --timeout 10
-regionshot launch .build/debug/MyDebugApp --wait-window --args --fixture smoke
-regionshot quit --app "My Debug App"
-regionshot quit --pid 12345 --force
+brrainztools activate --app "System Settings"
+brrainztools activate --pid 12345
+brrainztools launch com.apple.TextEdit --wait-window --timeout 10
+brrainztools launch .build/debug/MyDebugApp --wait-window --args --fixture smoke
+brrainztools quit --app "My Debug App"
+brrainztools quit --pid 12345 --force
 ```
 
 `activate` resolves a running app by name, bundle id, or process id, asks macOS
@@ -84,9 +84,9 @@ macOS accepted the termination request.
 ## Displays
 
 ```bash
-regionshot --list-displays
-regionshot --display DISPLAY_ID --output ~/Desktop/display.png
-regionshot --all-displays --format jpeg --quality 0.7 --max-dimension 1600
+brrainztools --list-displays
+brrainztools --display DISPLAY_ID --output ~/Desktop/display.png
+brrainztools --all-displays --format jpeg --quality 0.7 --max-dimension 1600
 ```
 
 `--list-displays` returns active displays, including the display id, point
@@ -101,14 +101,14 @@ support the same capture output options as rectangle capture, including
 ## Basic Capture
 
 ```bash
-regionshot
-regionshot 120 240 800 600
-regionshot --x 120 --y 240 --width 800 --height 600
-regionshot 120 240 800 600 --output ~/Desktop/region.png
-regionshot 120 240 800 600 --raw
-regionshot 120 240 800 600 --with-ascii
-regionshot 120 240 800 600 --with-ocr
-regionshot 120 240 800 600 --format jpeg --quality 0.7 --max-dimension 1200
+brrainztools
+brrainztools 120 240 800 600
+brrainztools --x 120 --y 240 --width 800 --height 600
+brrainztools 120 240 800 600 --output ~/Desktop/region.png
+brrainztools 120 240 800 600 --raw
+brrainztools 120 240 800 600 --with-ascii
+brrainztools 120 240 800 600 --with-ocr
+brrainztools 120 240 800 600 --format jpeg --quality 0.7 --max-dimension 1200
 ```
 
 Without `--app`, rectangle capture uses ScreenCaptureKit display capture for
@@ -117,7 +117,7 @@ the visible pixels in that screen region.
 By default, capture commands create a temporary file and return its path as
 `output`. Add `--raw` to print only the path.
 
-Use `--with-ascii` when the next step is text inspection; RegionShot captures
+Use `--with-ascii` when the next step is text inspection; BrrainzTools captures
 the image, runs the existing ASCII/OCR renderer on that file, and returns both
 `output` and `report` in one envelope. Use `--with-ocr` when only OCR blocks are
 needed; it returns `output` plus OCR `data` without rendering the ASCII canvas.
@@ -133,8 +133,8 @@ as provided.
 ## Find Apps
 
 ```bash
-regionshot --find-app Terminal
-regionshot --find-app RimWorld
+brrainztools --find-app Terminal
+brrainztools --find-app RimWorld
 ```
 
 Use this when you do not know the exact running app name. The output includes
@@ -147,21 +147,21 @@ values keep the historical behavior and are treated as process ids. Use
 matching when an app name is numeric:
 
 ```bash
-regionshot --app "System Settings"
-regionshot --app com.apple.systempreferences
-regionshot --app 12345
-regionshot --pid 12345
-regionshot --app-name "2048"
+brrainztools --app "System Settings"
+brrainztools --app com.apple.systempreferences
+brrainztools --app 12345
+brrainztools --pid 12345
+brrainztools --app-name "2048"
 ```
 
 ## Windows
 
 ```bash
-regionshot --app "System Settings" --list-windows
-regionshot --app "System Settings" --frontmost-window
-regionshot --app "System Settings" --window-index 0
-regionshot --app "System Settings" --window-name "<window title>"
-regionshot --app "System Settings" --frontmost-window --window-crop 40,80,300,160
+brrainztools --app "System Settings" --list-windows
+brrainztools --app "System Settings" --frontmost-window
+brrainztools --app "System Settings" --window-index 0
+brrainztools --app "System Settings" --window-name "<window title>"
+brrainztools --app "System Settings" --frontmost-window --window-crop 40,80,300,160
 ```
 
 Window indices are frontmost first within the selected app.
@@ -172,9 +172,9 @@ corner in points.
 ## Visible Windows
 
 ```bash
-regionshot --app "RimWorld" --list-visible-windows
-regionshot --app "RimWorld" --visible-window
-regionshot --app "Drafty" --visible-window --output ~/Desktop/drafty-panel.png
+brrainztools --app "RimWorld" --list-visible-windows
+brrainztools --app "RimWorld" --visible-window
+brrainztools --app "Drafty" --visible-window --output ~/Desktop/drafty-panel.png
 ```
 
 `--list-visible-windows` and `--visible-window` use the current visible window
@@ -190,8 +190,8 @@ included.
 ## App-Filtered Rectangles
 
 ```bash
-regionshot 120 240 800 600 --app "System Settings"
-regionshot 120 240 800 600 --app 12345
+brrainztools 120 240 800 600 --app "System Settings"
+brrainztools 120 240 800 600 --app 12345
 ```
 
 In app rectangle mode, the output contains only the selected app's windows
@@ -200,17 +200,17 @@ inside the rectangle, even if other apps are visually in front.
 ## Menu-Bar Items
 
 ```bash
-regionshot --app "Drafty" --list-menu-bar-items
-regionshot --app "Drafty" --capture-menu
-regionshot --app "Drafty" --menu-bar-index 0 --capture-menu
-regionshot --app "Drafty" --menu-bar-index 0 --press-menu-item "Quick Tasks"
-regionshot --app "Drafty" --menu-bar-item "Drafty" --press-menu-item "Preferences..."
+brrainztools --app "Drafty" --list-menu-bar-items
+brrainztools --app "Drafty" --capture-menu
+brrainztools --app "Drafty" --menu-bar-index 0 --capture-menu
+brrainztools --app "Drafty" --menu-bar-index 0 --press-menu-item "Quick Tasks"
+brrainztools --app "Drafty" --menu-bar-item "Drafty" --press-menu-item "Preferences..."
 ```
 
 Menu-bar modes work with accessibility menu-bar items exposed by the selected
 app. They are useful for status-item apps and menu-like popovers.
 
-If you omit `--menu-bar-index` or `--menu-bar-item`, RegionShot selects the
+If you omit `--menu-bar-index` or `--menu-bar-item`, BrrainzTools selects the
 single status-item entry when exactly one is available. If there are multiple
 candidates, the command fails and prints suggestions.
 
@@ -220,29 +220,29 @@ menu item by title, description, or identifier.
 ## Accessibility Inspection And Actions
 
 ```bash
-regionshot --app "System Settings" --list-elements
-regionshot --app "System Settings" --list-elements --depth 2 --max-children 12
-regionshot --app "System Settings" --list-elements --roles AXButton,AXTextField --interactive --flat
-regionshot --app "System Settings" --wait-for-window "Network" --timeout 10
-regionshot --app "System Settings" --get --path 0.3.1
-regionshot --app "System Settings" --get --role AXTextField --title Name
-regionshot --app "System Settings" --wait-for-element --role AXButton --title Done --timeout 10
-regionshot --app "System Settings" --set-value "Andreas" --path 0.3.1
-regionshot --app "System Settings" --set-value "Andreas" --role AXTextField --title Name
-regionshot --app "System Settings" --type "typed text"
-regionshot --app "System Settings" --key "cmd+s"
-regionshot --app "System Settings" --click 24,24
-regionshot --app "System Settings" --click 24,24 --right
-regionshot --app "System Settings" --drag 24,24,160,24
-regionshot --app "System Settings" --scroll 0,-800
-regionshot --app "System Settings" --press --role AXButton --title Done
-regionshot --app "System Settings" --press-at 14,14
-regionshot --app "System Settings" --element-at 14,14
-regionshot --app "System Settings" --window-name "<window title>" --press --role AXButton --title Done
+brrainztools --app "System Settings" --list-elements
+brrainztools --app "System Settings" --list-elements --depth 2 --max-children 12
+brrainztools --app "System Settings" --list-elements --roles AXButton,AXTextField --interactive --flat
+brrainztools --app "System Settings" --wait-for-window "Network" --timeout 10
+brrainztools --app "System Settings" --get --path 0.3.1
+brrainztools --app "System Settings" --get --role AXTextField --title Name
+brrainztools --app "System Settings" --wait-for-element --role AXButton --title Done --timeout 10
+brrainztools --app "System Settings" --set-value "Andreas" --path 0.3.1
+brrainztools --app "System Settings" --set-value "Andreas" --role AXTextField --title Name
+brrainztools --app "System Settings" --type "typed text"
+brrainztools --app "System Settings" --key "cmd+s"
+brrainztools --app "System Settings" --click 24,24
+brrainztools --app "System Settings" --click 24,24 --right
+brrainztools --app "System Settings" --drag 24,24,160,24
+brrainztools --app "System Settings" --scroll 0,-800
+brrainztools --app "System Settings" --press --role AXButton --title Done
+brrainztools --app "System Settings" --press-at 14,14
+brrainztools --app "System Settings" --element-at 14,14
+brrainztools --app "System Settings" --window-name "<window title>" --press --role AXButton --title Done
 ```
 
 `--list-elements` prints a bounded JSON accessibility tree for the selected
-window. If you omit a window selector, RegionShot uses the focused window, then
+window. If you omit a window selector, BrrainzTools uses the focused window, then
 the main window, then the first accessibility window.
 Element JSON includes structural fields plus readable state when macOS exposes
 it: `path`, `value`, `enabled`, `focused`, and `selected`.
@@ -301,12 +301,12 @@ window-relative point plus its ancestor chain.
 ## ASCII And OCR View
 
 ```bash
-regionshot --ascii /tmp/screenshot.png
-regionshot --ascii /tmp/screenshot.png --ascii-width 160 --ascii-max-height 80
-regionshot --ascii /tmp/screenshot.png --ascii-style tone --ascii-width 100 --ascii-max-height 60
-regionshot --ascii /tmp/screenshot.png --ascii-language de-DE,sv-SE
-regionshot --ascii /tmp/screenshot.png --ocr-only
-regionshot --ascii /tmp/screenshot.png --raw
+brrainztools --ascii /tmp/screenshot.png
+brrainztools --ascii /tmp/screenshot.png --ascii-width 160 --ascii-max-height 80
+brrainztools --ascii /tmp/screenshot.png --ascii-style tone --ascii-width 100 --ascii-max-height 60
+brrainztools --ascii /tmp/screenshot.png --ascii-language de-DE,sv-SE
+brrainztools --ascii /tmp/screenshot.png --ocr-only
+brrainztools --ascii /tmp/screenshot.png --raw
 ```
 
 `--ascii IMAGE` reads an existing screenshot or image file and returns a compact
@@ -315,7 +315,7 @@ text inspection report as `report`. Add `--raw` to print only the report text.
 The default `layout` style renders sparse borders, dividers, and scrollbars,
 then overlays Vision OCR text at approximate screenshot positions. The OCR
 block list is printed below the layout map with pixel bounds and confidence.
-By default RegionShot asks Vision to detect text languages automatically. Use
+By default BrrainzTools asks Vision to detect text languages automatically. Use
 `--ascii-language CODE[,CODE...]` to pass explicit OCR language codes instead.
 
 Useful options:
@@ -338,27 +338,27 @@ ScreenCaptureKit app/window operations time out after five seconds by default.
 Use `--timeout SECONDS` when the system is slow:
 
 ```bash
-regionshot --app "System Settings" --frontmost-window --timeout 10
+brrainztools --app "System Settings" --frontmost-window --timeout 10
 ```
 
 If app/window capture times out, try visible-window capture:
 
 ```bash
-regionshot --app "System Settings" --list-visible-windows
-regionshot --app "System Settings" --visible-window --output ~/Desktop/window.png
+brrainztools --app "System Settings" --list-visible-windows
+brrainztools --app "System Settings" --visible-window --output ~/Desktop/window.png
 ```
 
 ## Accessibility Windows
 
 ```bash
-regionshot --app "Terminal" --list-accessibility-windows
-regionshot --app "Terminal" --window-index 0 --raise-window
-regionshot --app "Terminal" --window-name "server logs" --raise-window
-regionshot --app "Terminal" --window-name "server logs" --raise
-regionshot --app "Terminal" --window-name "server logs" --close-window
-regionshot --app "Terminal" --window-name "server logs" --minimize-window
-regionshot --app "Terminal" --window-name "server logs" --move-window 120,80
-regionshot --app "Terminal" --window-name "server logs" --resize-window 900,600
+brrainztools --app "Terminal" --list-accessibility-windows
+brrainztools --app "Terminal" --window-index 0 --raise-window
+brrainztools --app "Terminal" --window-name "server logs" --raise-window
+brrainztools --app "Terminal" --window-name "server logs" --raise
+brrainztools --app "Terminal" --window-name "server logs" --close-window
+brrainztools --app "Terminal" --window-name "server logs" --minimize-window
+brrainztools --app "Terminal" --window-name "server logs" --move-window 120,80
+brrainztools --app "Terminal" --window-name "server logs" --resize-window 900,600
 ```
 
 `--list-accessibility-windows` lists windows through Accessibility instead of
@@ -368,12 +368,12 @@ actions, `isFocused`, `isMain`, `isFrontmostApplication`, and
 
 `isFrontmostWindow` means the selected app is the current
 `NSWorkspace.frontmostApplication`, and the window is that app's focused AX
-window. If the app exposes no focused AX window, RegionShot falls back to the
+window. If the app exposes no focused AX window, BrrainzTools falls back to the
 main window, then index 0.
 
 `--raise-window` activates the app and performs `AXRaise` on the selected AX
 window. Select the window with `--window-index`, `--window-name`, or
-`--frontmost-window`; if you omit a selector, RegionShot uses the same focused,
+`--frontmost-window`; if you omit a selector, BrrainzTools uses the same focused,
 main, then first-window fallback as other Accessibility modes.
 
 `--close-window` presses the selected AX window's close button using the same
@@ -394,10 +394,10 @@ process.
 Accessibility inspection and actions require Accessibility permission for the
 host process.
 
-The host process is the app that starts `regionshot`, such as Terminal, iTerm,
+The host process is the app that starts `brrainztools`, such as Terminal, iTerm,
 or Codex.
 
-Use `regionshot doctor` to check both permissions without triggering a system
+Use `brrainztools doctor` to check both permissions without triggering a system
 permission prompt.
 
 Add `--no-prompt` to Accessibility, menu-bar, or `launch --wait-window` commands
@@ -406,7 +406,7 @@ macOS to show the permission prompt.
 
 ## Exit Codes
 
-RegionShot uses distinct exit codes so automation can decide whether to retry,
+BrrainzTools uses distinct exit codes so automation can decide whether to retry,
 ask for a more specific selector, or hand the issue to the user:
 
 - `64`: usage error or invalid arguments

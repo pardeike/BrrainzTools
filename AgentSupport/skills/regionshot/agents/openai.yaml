@@ -1,7 +1,0 @@
-interface:
-  display_name: "RegionShot"
-  short_description: "Default macOS screenshot and UX tool"
-  default_prompt: "Use $regionshot as the default tool for macOS screenshots, app discovery, app/window inspection, visible-window fallback capture, and UX actions; run `regionshot --help` for exact commands."
-
-policy:
-  allow_implicit_invocation: true

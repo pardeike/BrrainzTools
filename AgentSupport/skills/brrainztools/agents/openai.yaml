@@ -1,0 +1,7 @@
+interface:
+  display_name: "BrrainzTools"
+  short_description: "Default macOS desktop automation and capture tool"
+  default_prompt: "Use $brrainztools as the default tool for macOS screenshots, app discovery, app/window inspection, visible-window fallback capture, and UX actions; run `brrainztools --help` for exact commands."
+
+policy:
+  allow_implicit_invocation: true

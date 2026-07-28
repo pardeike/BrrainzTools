@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 import Vision
 
 @main
-struct RegionShot {
+struct BrrainzTools {
     static func main() async {
         do {
             let behavior = try parse(arguments: Array(CommandLine.arguments.dropFirst()))
@@ -102,7 +102,7 @@ struct RegionShot {
                     print(try dataEnvelopeJSON(mode: command.mode.envelopeMode, dataJSON: result))
                 }
             }
-        } catch let error as RegionShotError {
+        } catch let error as BrrainzToolsError {
             let json = (try? errorEnvelopeJSON(error: error)) ?? fallbackErrorEnvelopeJSON(
                 kind: error.kind,
                 message: error.localizedDescription,
@@ -1228,7 +1228,7 @@ private struct RunningApplicationMatch {
     let activationRank: Int
 }
 
-enum RegionShotError: LocalizedError, Sendable {
+enum BrrainzToolsError: LocalizedError, Sendable {
     case invalidArguments(String)
     case invalidInteger(flag: String, value: String)
     case invalidRegion(String)
@@ -1344,10 +1344,10 @@ private let accessibilityTreeDepthRange = 0...12
 private let accessibilityTreeChildLimitRange = 1...200
 
 private let usageText = """
-regionshot = macOS screenshot, inspection, and UI action tool.
+brrainztools = macOS desktop automation, inspection, and capture tool for agents and scripts.
 
 Usage:
-  regionshot <subcommand> [options]
+  brrainztools <subcommand> [options]
 
 Subcommands:
   capture   pixel capture: regions, app windows, visible windows, displays
@@ -1360,17 +1360,17 @@ Subcommands:
   launch | activate | quit
 
 Legacy flag-first forms are still accepted.
-Run `regionshot <subcommand> --help` for focused help.
+Run `brrainztools <subcommand> --help` for focused help.
 """
 
 private let captureHelpText = """
 Usage:
-  regionshot capture X Y WIDTH HEIGHT [options]
-  regionshot capture --x X --y Y --width WIDTH --height HEIGHT [options]
-  regionshot capture --display DISPLAY_ID [options]
-  regionshot capture --all-displays [options]
-  regionshot capture --app APP [--frontmost-window | --window-index N | --window-name TITLE] [options]
-  regionshot capture --app APP --visible-window [--window-index N | --window-name TITLE | --frontmost-window] [options]
+  brrainztools capture X Y WIDTH HEIGHT [options]
+  brrainztools capture --x X --y Y --width WIDTH --height HEIGHT [options]
+  brrainztools capture --display DISPLAY_ID [options]
+  brrainztools capture --all-displays [options]
+  brrainztools capture --app APP [--frontmost-window | --window-index N | --window-name TITLE] [options]
+  brrainztools capture --app APP --visible-window [--window-index N | --window-name TITLE | --frontmost-window] [options]
 
 Options:
   --output FILE
@@ -1385,17 +1385,17 @@ Options:
 
 private let appsHelpText = """
 Usage:
-  regionshot apps QUERY
+  brrainztools apps QUERY
 
 Find running apps by name, bundle id, path, or pid. Equivalent legacy form:
-  regionshot --find-app QUERY
+  brrainztools --find-app QUERY
 """
 
 private let windowsHelpText = """
 Usage:
-  regionshot windows --app APP
-  regionshot windows --app APP --visible
-  regionshot windows --app APP --ax
+  brrainztools windows --app APP
+  brrainztools windows --app APP --visible
+  brrainztools windows --app APP --ax
 
 Modes:
   default    ScreenCaptureKit app windows
@@ -1405,7 +1405,7 @@ Modes:
 
 private let axHelpText = """
 Usage:
-  regionshot ax --app APP ACTION [selectors/options]
+  brrainztools ax --app APP ACTION [selectors/options]
 
 Actions:
   windows
@@ -1443,10 +1443,10 @@ Selectors/options:
 
 private let menuHelpText = """
 Usage:
-  regionshot menu --app APP list
-  regionshot menu --app APP press [--menu-bar-index N | --menu-bar-item TEXT]
-  regionshot menu --app APP press-item TEXT [--menu-bar-index N | --menu-bar-item TEXT]
-  regionshot menu --app APP capture [--menu-bar-index N | --menu-bar-item TEXT] [capture options]
+  brrainztools menu --app APP list
+  brrainztools menu --app APP press [--menu-bar-index N | --menu-bar-item TEXT]
+  brrainztools menu --app APP press-item TEXT [--menu-bar-index N | --menu-bar-item TEXT]
+  brrainztools menu --app APP capture [--menu-bar-index N | --menu-bar-item TEXT] [capture options]
 
 Capture options:
   --output FILE
@@ -1461,7 +1461,7 @@ Capture options:
 
 private let asciiHelpText = """
 Usage:
-  regionshot ascii IMAGE [options]
+  brrainztools ascii IMAGE [options]
 
 Options:
   --ascii-style layout|tone
@@ -1476,17 +1476,17 @@ Options:
 
 private let displaysHelpText = """
 Usage:
-  regionshot displays
-  regionshot capture --display DISPLAY_ID [capture options]
-  regionshot capture --all-displays [capture options]
+  brrainztools displays
+  brrainztools capture --display DISPLAY_ID [capture options]
+  brrainztools capture --all-displays [capture options]
 
-`regionshot displays` returns active display ids, point frames, pixel sizes,
+`brrainztools displays` returns active display ids, point frames, pixel sizes,
 scale, and main-display status.
 """
 
 private let doctorHelpText = """
 Usage:
-  regionshot doctor
+  brrainztools doctor
 
 Checks Screen Recording and Accessibility permission status without prompting,
 and reports the host process that macOS permissions apply to.
@@ -1494,15 +1494,15 @@ and reports the host process that macOS permissions apply to.
 
 private let clipboardHelpText = """
 Usage:
-  regionshot clipboard
-  regionshot clipboard --set TEXT
+  brrainztools clipboard
+  brrainztools clipboard --set TEXT
 
 Reads or sets plain text on the general pasteboard.
 """
 
 private let launchHelpText = """
 Usage:
-  regionshot launch PATH|BUNDLE_ID [--wait-window [--no-prompt]] [--timeout SECONDS] [--args ARG ...]
+  brrainztools launch PATH|BUNDLE_ID [--wait-window [--no-prompt]] [--timeout SECONDS] [--args ARG ...]
 
 Starts an app bundle, bundle id, or executable path. `--wait-window` waits for
 the launched app's first Accessibility window.
@@ -1510,35 +1510,37 @@ the launched app's first Accessibility window.
 
 private let activateHelpText = """
 Usage:
-  regionshot activate --app APP
-  regionshot activate --app-name NAME
-  regionshot activate --pid PID
+  brrainztools activate --app APP
+  brrainztools activate --app-name NAME
+  brrainztools activate --pid PID
 
 Activates a running app.
 """
 
 private let quitHelpText = """
 Usage:
-  regionshot quit --app APP [--force]
-  regionshot quit --app-name NAME [--force]
-  regionshot quit --pid PID [--force]
+  brrainztools quit --app APP [--force]
+  brrainztools quit --app-name NAME [--force]
+  brrainztools quit --pid PID [--force]
 
 Asks a running app to terminate; `--force` force-terminates it.
 """
 
-private let agentSupportSkillName = "regionshot"
+private let agentSupportSkillName = "brrainztools"
 private let agentSupportDirectoryName = "AgentSupport"
-private let legacyCodexSupportDirectoryName = "Codex"
-private let managedAgentInstructionsStartMarker = "<!-- regionshot-managed:start -->"
-private let managedAgentInstructionsEndMarker = "<!-- regionshot-managed:end -->"
-private let agentSupportDebugEnvironmentKey = "REGIONSHOT_DEBUG_AGENT_SYNC"
-private let legacyAgentSupportDebugEnvironmentKey = "REGIONSHOT_DEBUG_CODEX_SYNC"
-private let regionShotFallbackVersion = "v1.1.2"
-private let regionShotVersionEnvironmentKey = "REGIONSHOT_VERSION"
-private let regionShotSupportDirectoryName = ".regionshot-support"
-private let regionShotSupportVersionFilename = "VERSION"
+private let managedAgentInstructionsStartMarker = "<!-- brrainztools-managed:start -->"
+private let managedAgentInstructionsEndMarker = "<!-- brrainztools-managed:end -->"
+private let agentSupportDebugEnvironmentKey = "BRRAINZTOOLS_DEBUG_AGENT_SYNC"
+// Artifacts written by pre-rename RegionShot installs; the sync path removes them wherever it runs.
+private let legacyAgentSupportSkillName = "regionshot"
+private let legacyManagedAgentInstructionsStartMarker = "<!-- regionshot-managed:start -->"
+private let legacyManagedAgentInstructionsEndMarker = "<!-- regionshot-managed:end -->"
+private let brrainzToolsFallbackVersion = "v2.0.0"
+private let brrainzToolsVersionEnvironmentKey = "BRRAINZTOOLS_VERSION"
+private let brrainzToolsSupportDirectoryName = ".brrainztools-support"
+private let brrainzToolsSupportVersionFilename = "VERSION"
 
-private let cachedRegionShotVersion: String = regionShotVersion(
+private let cachedBrrainzToolsVersion: String = brrainzToolsVersion(
     environment: ProcessInfo.processInfo.environment,
     executableDirectory: currentExecutableURL()?.deletingLastPathComponent(),
     currentDirectoryURL: URL(
@@ -1549,18 +1551,18 @@ private let cachedRegionShotVersion: String = regionShotVersion(
     gitDescribe: gitDescribeVersion
 )
 
-private func currentRegionShotVersion() -> String {
-    cachedRegionShotVersion
+private func currentBrrainzToolsVersion() -> String {
+    cachedBrrainzToolsVersion
 }
 
-func regionShotVersion(
+func brrainzToolsVersion(
     environment: [String: String],
     executableDirectory: URL?,
     currentDirectoryURL: URL,
     readTextFile: (URL) -> String?,
     gitDescribe: (URL) -> String?
 ) -> String {
-    if let environmentVersion = normalizedVersion(environment[regionShotVersionEnvironmentKey]) {
+    if let environmentVersion = normalizedVersion(environment[brrainzToolsVersionEnvironmentKey]) {
         return environmentVersion
     }
 
@@ -1569,8 +1571,8 @@ func regionShotVersion(
         let supportVersion = normalizedVersion(
             readTextFile(
                 executableDirectory
-                    .appendingPathComponent(regionShotSupportDirectoryName, isDirectory: true)
-                    .appendingPathComponent(regionShotSupportVersionFilename)
+                    .appendingPathComponent(brrainzToolsSupportDirectoryName, isDirectory: true)
+                    .appendingPathComponent(brrainzToolsSupportVersionFilename)
             )
         )
     {
@@ -1578,7 +1580,7 @@ func regionShotVersion(
     }
 
     if
-        let repositoryURL = regionShotRepositoryRoot(
+        let repositoryURL = brrainzToolsRepositoryRoot(
             containing: currentDirectoryURL,
             readTextFile: readTextFile
         ),
@@ -1587,10 +1589,10 @@ func regionShotVersion(
         return gitVersion
     }
 
-    return regionShotFallbackVersion
+    return brrainzToolsFallbackVersion
 }
 
-private func regionShotRepositoryRoot(
+private func brrainzToolsRepositoryRoot(
     containing currentDirectoryURL: URL,
     readTextFile: (URL) -> String?
 ) -> URL? {
@@ -1600,7 +1602,7 @@ private func regionShotRepositoryRoot(
         let manifestURL = candidate.appendingPathComponent("Package.swift")
         if
             let manifest = readTextFile(manifestURL),
-            packageManifestDeclaresRegionShot(manifest)
+            packageManifestDeclaresBrrainzTools(manifest)
         {
             return candidate
         }
@@ -1614,9 +1616,9 @@ private func regionShotRepositoryRoot(
     }
 }
 
-private func packageManifestDeclaresRegionShot(_ manifest: String) -> Bool {
+private func packageManifestDeclaresBrrainzTools(_ manifest: String) -> Bool {
     manifest.range(
-        of: #"name\s*:\s*"RegionShot""#,
+        of: #"name\s*:\s*"BrrainzTools""#,
         options: .regularExpression
     ) != nil
 }
@@ -1680,7 +1682,7 @@ private func currentDoctorStatus() -> DoctorResponse {
     doctorStatus(
         screenRecordingAccess: { CGPreflightScreenCaptureAccess() },
         accessibilityTrusted: { AXIsProcessTrusted() },
-        version: currentRegionShotVersion,
+        version: currentBrrainzToolsVersion,
         hostProcess: currentHostProcess
     )
 }
@@ -1716,7 +1718,7 @@ func handleClipboard(using command: ClipboardCommand) throws -> String {
     if let setText = command.setText {
         pasteboard.clearContents()
         guard pasteboard.setString(setText, forType: .string) else {
-            throw RegionShotError.captureFailed("Failed to write text to the clipboard.")
+            throw BrrainzToolsError.captureFailed("Failed to write text to the clipboard.")
         }
 
         return try encodeJSON(ClipboardResponse(action: "set", text: setText))
@@ -1792,7 +1794,7 @@ private func launchApplication(target: LaunchTarget, arguments: [String]) throws
     switch target {
     case .bundleIdentifier(let bundleIdentifier):
         guard let applicationURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
-            throw RegionShotError.applicationNotFound("No application bundle matches bundle id `\(bundleIdentifier)`.")
+            throw BrrainzToolsError.applicationNotFound("No application bundle matches bundle id `\(bundleIdentifier)`.")
         }
 
         let application = try openApplication(at: applicationURL, arguments: arguments)
@@ -1802,12 +1804,12 @@ private func launchApplication(target: LaunchTarget, arguments: [String]) throws
         let url = fileURL(from: path)
         var isDirectory = ObjCBool(false)
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
-            throw RegionShotError.applicationNotFound("No application or executable exists at `\(url.path)`.")
+            throw BrrainzToolsError.applicationNotFound("No application or executable exists at `\(url.path)`.")
         }
 
         if isDirectory.boolValue {
             guard url.pathExtension.lowercased() == "app" else {
-                throw RegionShotError.launchFailed("Launch path `\(url.path)` is a directory, not an app bundle or executable.")
+                throw BrrainzToolsError.launchFailed("Launch path `\(url.path)` is a directory, not an app bundle or executable.")
             }
 
             let application = try openApplication(at: url, arguments: arguments)
@@ -1815,7 +1817,7 @@ private func launchApplication(target: LaunchTarget, arguments: [String]) throws
         }
 
         guard FileManager.default.isExecutableFile(atPath: url.path) else {
-            throw RegionShotError.launchFailed("Launch path `\(url.path)` is not executable.")
+            throw BrrainzToolsError.launchFailed("Launch path `\(url.path)` is not executable.")
         }
 
         let process = Process()
@@ -1829,7 +1831,7 @@ private func launchApplication(target: LaunchTarget, arguments: [String]) throws
         do {
             try process.run()
         } catch {
-            throw RegionShotError.launchFailed("Failed to launch executable `\(url.path)`: \(error.localizedDescription)")
+            throw BrrainzToolsError.launchFailed("Failed to launch executable `\(url.path)`: \(error.localizedDescription)")
         }
 
         let processID = process.processIdentifier
@@ -1855,15 +1857,15 @@ private func openApplication(at applicationURL: URL, arguments: [String]) throws
     }
 
     guard semaphore.wait(timeout: .now() + 10) == .success else {
-        throw RegionShotError.operationTimedOut("macOS did not return launch status for `\(applicationURL.path)` within 10 seconds.")
+        throw BrrainzToolsError.operationTimedOut("macOS did not return launch status for `\(applicationURL.path)` within 10 seconds.")
     }
 
     if let error = result.error {
-        throw RegionShotError.launchFailed("Failed to launch `\(applicationURL.path)`: \(error.localizedDescription)")
+        throw BrrainzToolsError.launchFailed("Failed to launch `\(applicationURL.path)`: \(error.localizedDescription)")
     }
 
     guard let application = result.application else {
-        throw RegionShotError.launchFailed("macOS did not return a running application for `\(applicationURL.path)`.")
+        throw BrrainzToolsError.launchFailed("macOS did not return a running application for `\(applicationURL.path)`.")
     }
 
     return application
@@ -1937,9 +1939,8 @@ private func synchronizeAgentSupportIfAvailable() {
         try installOrUpdateAgentSupportIfAvailable()
     } catch {
         let environment = ProcessInfo.processInfo.environment
-        if environment[agentSupportDebugEnvironmentKey] == "1" ||
-            environment[legacyAgentSupportDebugEnvironmentKey] == "1" {
-            writeStandardError("warning: failed to sync RegionShot agent support files: \(error.localizedDescription)\n")
+        if environment[agentSupportDebugEnvironmentKey] == "1" {
+            writeStandardError("warning: failed to sync BrrainzTools agent support files: \(error.localizedDescription)\n")
         }
     }
 }
@@ -1976,6 +1977,8 @@ private func installOrUpdateAgentSupportIfAvailable() throws {
         .appendingPathComponent(agentSupportSkillName, isDirectory: true)
     let claudeDestinationURL = claudeHomeDirectory.appendingPathComponent("CLAUDE.md")
 
+    removeLegacySkillDirectories(under: [codexHomeDirectory, claudeHomeDirectory])
+
     try syncDirectoryIfNeeded(from: skillSourceDirectory, to: codexSkillDestinationDirectory)
     try syncDirectoryIfNeeded(
         from: skillSourceDirectory,
@@ -1986,6 +1989,20 @@ private func installOrUpdateAgentSupportIfAvailable() throws {
     let pointerBody = try String(contentsOf: pointerSourceURL, encoding: .utf8)
     try upsertManagedAgentInstructions(pointerBody, at: agentsDestinationURL)
     try upsertManagedAgentInstructions(pointerBody, at: claudeDestinationURL)
+}
+
+private func removeLegacySkillDirectories(under agentHomeDirectories: [URL]) {
+    let fileManager = FileManager.default
+
+    for agentHomeDirectory in agentHomeDirectories {
+        let legacySkillDirectory = agentHomeDirectory
+            .appendingPathComponent("skills", isDirectory: true)
+            .appendingPathComponent(legacyAgentSupportSkillName, isDirectory: true)
+
+        if fileManager.fileExists(atPath: legacySkillDirectory.path) {
+            try? fileManager.removeItem(at: legacySkillDirectory)
+        }
+    }
 }
 
 private func findAgentSupportDirectory() -> URL? {
@@ -2038,9 +2055,8 @@ private func agentSupportCandidates() -> [URL] {
 }
 
 private func appendInstalledAgentSupportDirectories(startingAt directory: URL, to candidates: inout [URL]) {
-    let supportDirectory = directory.appendingPathComponent(regionShotSupportDirectoryName, isDirectory: true)
+    let supportDirectory = directory.appendingPathComponent(brrainzToolsSupportDirectoryName, isDirectory: true)
     candidates.append(supportDirectory.appendingPathComponent(agentSupportDirectoryName, isDirectory: true))
-    candidates.append(supportDirectory.appendingPathComponent(legacyCodexSupportDirectoryName, isDirectory: true))
 }
 
 private func appendAncestorAgentSupportDirectories(startingAt directory: URL, to candidates: inout [URL]) {
@@ -2049,7 +2065,6 @@ private func appendAncestorAgentSupportDirectories(startingAt directory: URL, to
     while true {
         let currentDirectoryURL = URL(fileURLWithPath: currentPath, isDirectory: true)
         candidates.append(currentDirectoryURL.appendingPathComponent(agentSupportDirectoryName, isDirectory: true))
-        candidates.append(currentDirectoryURL.appendingPathComponent(legacyCodexSupportDirectoryName, isDirectory: true))
 
         let parentPath = (currentPath as NSString).deletingLastPathComponent
         if parentPath.isEmpty || parentPath == currentPath {
@@ -2214,11 +2229,12 @@ private func upsertManagedAgentInstructions(_ pointerBody: String, at agentsURL:
     try updatedContents.write(to: agentsURL, atomically: true, encoding: .utf8)
 }
 
-private func updatedAgentsContents(
+func updatedAgentsContents(
     from existingContents: String,
     managedBlock: String,
     legacyPointerBody: String
 ) -> String {
+    let existingContents = removingLegacyManagedAgentInstructions(from: existingContents)
     let normalizedExistingContents = normalizeManagedText(existingContents)
     let legacyStandaloneContents = normalizeManagedText("""
     # User Environment Notes
@@ -2241,6 +2257,30 @@ private func updatedAgentsContents(
     }
 
     return ensureTrailingNewline(in: existingContents) + "\n\(managedBlock)\n"
+}
+
+private func removingLegacyManagedAgentInstructions(from contents: String) -> String {
+    var updatedContents = contents
+
+    while
+        let startRange = updatedContents.range(of: legacyManagedAgentInstructionsStartMarker),
+        let endRange = updatedContents.range(
+            of: legacyManagedAgentInstructionsEndMarker,
+            range: startRange.upperBound..<updatedContents.endIndex
+        )
+    {
+        updatedContents.removeSubrange(startRange.lowerBound..<endRange.upperBound)
+    }
+
+    guard updatedContents != contents else {
+        return contents
+    }
+
+    return updatedContents.replacingOccurrences(
+        of: #"\n{3,}"#,
+        with: "\n\n",
+        options: .regularExpression
+    )
 }
 
 private func managedAgentsRange(in contents: String) -> Range<String.Index>? {
@@ -2277,7 +2317,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
 
     if arguments.first == "doctor" {
         guard arguments.count == 1 else {
-            throw RegionShotError.invalidArguments("`doctor` does not accept additional arguments.")
+            throw BrrainzToolsError.invalidArguments("`doctor` does not accept additional arguments.")
         }
         return .doctor
     }
@@ -2307,7 +2347,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     if parsed.flags.contains("--version") {
         let hasOtherFlag = parsed.flags.contains { $0 != "--version" }
         if parsed.region != nil || !parsed.values.isEmpty || hasOtherFlag {
-            throw RegionShotError.invalidArguments("`--version` cannot be combined with other arguments.")
+            throw BrrainzToolsError.invalidArguments("`--version` cannot be combined with other arguments.")
         }
         return .showVersion
     }
@@ -2315,7 +2355,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     if parsed.flags.contains("--doctor") {
         let hasOtherFlag = parsed.flags.contains { $0 != "--doctor" }
         if parsed.region != nil || !parsed.values.isEmpty || hasOtherFlag {
-            throw RegionShotError.invalidArguments("`--doctor` cannot be combined with other arguments.")
+            throw BrrainzToolsError.invalidArguments("`--doctor` cannot be combined with other arguments.")
         }
         return .doctor
     }
@@ -2323,7 +2363,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     if parsed.flags.contains("--list-displays") {
         let hasOtherFlag = parsed.flags.contains { $0 != "--list-displays" }
         if parsed.region != nil || !parsed.values.isEmpty || hasOtherFlag {
-            throw RegionShotError.invalidArguments("`--list-displays` cannot be combined with other arguments.")
+            throw BrrainzToolsError.invalidArguments("`--list-displays` cannot be combined with other arguments.")
         }
         return .listDisplays
     }
@@ -2418,27 +2458,27 @@ func parse(arguments: [String]) throws -> CommandBehavior {
         parsed.values["--max-dimension"] != nil
 
     if parsed.values["--find-app"] != nil, findAppQuery == nil {
-        throw RegionShotError.invalidArguments("`--find-app` requires a non-empty search string.")
+        throw BrrainzToolsError.invalidArguments("`--find-app` requires a non-empty search string.")
     }
 
     if parsed.values["--ascii"] != nil, asciiImagePath == nil {
-        throw RegionShotError.invalidArguments("`--ascii` requires a non-empty image path.")
+        throw BrrainzToolsError.invalidArguments("`--ascii` requires a non-empty image path.")
     }
 
     if parsed.values["--press-menu-item"] != nil, pressMenuItemQuery == nil {
-        throw RegionShotError.invalidArguments("`--press-menu-item` requires a non-empty child menu item title, description, or identifier.")
+        throw BrrainzToolsError.invalidArguments("`--press-menu-item` requires a non-empty child menu item title, description, or identifier.")
     }
 
     if wantsAccessibilityWaitForWindow, waitForWindowTitle == nil {
-        throw RegionShotError.invalidArguments("`--wait-for-window` requires a non-empty window title.")
+        throw BrrainzToolsError.invalidArguments("`--wait-for-window` requires a non-empty window title.")
     }
 
     if wantsAccessibilityTypeText, normalizedArgumentValue(typeText) == nil {
-        throw RegionShotError.invalidArguments("`--type` requires non-empty text.")
+        throw BrrainzToolsError.invalidArguments("`--type` requires non-empty text.")
     }
 
     if (wantsRightClick || wantsDoubleClick), clickPoint == nil {
-        throw RegionShotError.invalidArguments("`--right` and `--double` require `--click X,Y`.")
+        throw BrrainzToolsError.invalidArguments("`--right` and `--double` require `--click X,Y`.")
     }
 
     if let asciiImagePath {
@@ -2448,11 +2488,11 @@ func parse(arguments: [String]) throws -> CommandBehavior {
         let hasOtherFlag = parsed.flags.contains { !allowedFlagKeys.contains($0) }
 
         if parsed.region != nil || hasOtherValue || hasOtherFlag {
-            throw RegionShotError.invalidArguments("`--ascii` cannot be combined with capture, app/window, menu-bar, Accessibility, `--find-app`, or `--output` modes.")
+            throw BrrainzToolsError.invalidArguments("`--ascii` cannot be combined with capture, app/window, menu-bar, Accessibility, `--find-app`, or `--output` modes.")
         }
 
         if wantsOCROnly, wantsAsciiNoOCR {
-            throw RegionShotError.invalidArguments("`--ocr-only` cannot be combined with `--ascii-no-ocr`.")
+            throw BrrainzToolsError.invalidArguments("`--ocr-only` cannot be combined with `--ascii-no-ocr`.")
         }
 
         return .asciiArt(
@@ -2482,20 +2522,20 @@ func parse(arguments: [String]) throws -> CommandBehavior {
 
     if hasAsciiOption {
         if !wantsWithAscii, !wantsWithOCR {
-            throw RegionShotError.invalidArguments("`--ascii-style`, `--ascii-width`, `--ascii-max-height`, `--ascii-language`, `--ascii-invert`, `--ascii-no-ocr`, and `--ocr-only` require `--ascii IMAGE`, `--with-ascii`, or `--with-ocr`.")
+            throw BrrainzToolsError.invalidArguments("`--ascii-style`, `--ascii-width`, `--ascii-max-height`, `--ascii-language`, `--ascii-invert`, `--ascii-no-ocr`, and `--ocr-only` require `--ascii IMAGE`, `--with-ascii`, or `--with-ocr`.")
         }
     }
 
     if wantsWithAscii, wantsWithOCR {
-        throw RegionShotError.invalidArguments("Choose only one of `--with-ascii` or `--with-ocr`.")
+        throw BrrainzToolsError.invalidArguments("Choose only one of `--with-ascii` or `--with-ocr`.")
     }
 
     if wantsWithOCR, hasAsciiRenderOption || wantsOCROnly {
-        throw RegionShotError.invalidArguments("`--with-ocr` can only be combined with `--ascii-language`; rendering options require `--with-ascii`.")
+        throw BrrainzToolsError.invalidArguments("`--with-ocr` can only be combined with `--ascii-language`; rendering options require `--with-ascii`.")
     }
 
     if wantsWithAscii, wantsOCROnly {
-        throw RegionShotError.invalidArguments("`--ocr-only` requires `--ascii IMAGE`; use `--with-ocr` for capture modes.")
+        throw BrrainzToolsError.invalidArguments("`--ocr-only` requires `--ascii IMAGE`; use `--with-ocr` for capture modes.")
     }
 
     if let findAppQuery {
@@ -2503,7 +2543,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
         let hasOtherFlag = parsed.flags.contains(where: { flag in flag != "--help" && flag != "-h" })
 
         if parsed.region != nil || hasOtherValue || hasOtherFlag {
-            throw RegionShotError.invalidArguments("`--find-app` cannot be combined with other command flags or rectangle coordinates.")
+            throw BrrainzToolsError.invalidArguments("`--find-app` cannot be combined with other command flags or rectangle coordinates.")
         }
 
         return .findApps(FindAppsCommand(query: findAppQuery))
@@ -2531,7 +2571,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     if windowSize != nil { accessibilityModeCount += 1 }
 
     if accessibilityModeCount > 1 {
-        throw RegionShotError.invalidArguments("Choose only one of `--list-accessibility-windows`, `--list-elements`, `--element-at`, `--wait-for-window`, `--get`/`--get-element`, `--wait-for-element`, `--set-value`, `--type`, `--key`, `--click`, `--drag`, `--scroll`, `--press`/`--press-element`, `--press-at`, `--raise-window`, `--close-window`, `--minimize-window`, `--move-window`, or `--resize-window`.")
+        throw BrrainzToolsError.invalidArguments("Choose only one of `--list-accessibility-windows`, `--list-elements`, `--element-at`, `--wait-for-window`, `--get`/`--get-element`, `--wait-for-element`, `--set-value`, `--type`, `--key`, `--click`, `--drag`, `--scroll`, `--press`/`--press-element`, `--press-at`, `--raise-window`, `--close-window`, `--minimize-window`, `--move-window`, or `--resize-window`.")
     }
 
     let menuBarModeCount = [
@@ -2542,7 +2582,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     ].reduce(0, +)
 
     if menuBarModeCount > 1 {
-        throw RegionShotError.invalidArguments("Choose only one of `--list-menu-bar-items`, menu-bar `--press`, or `--capture-menu`.")
+        throw BrrainzToolsError.invalidArguments("Choose only one of `--list-menu-bar-items`, menu-bar `--press`, or `--capture-menu`.")
     }
 
     let visibleWindowModeCount = [
@@ -2551,7 +2591,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     ].reduce(0, +)
 
     if visibleWindowModeCount > 1 {
-        throw RegionShotError.invalidArguments("Choose only one of `--list-visible-windows` or `--visible-window`.")
+        throw BrrainzToolsError.invalidArguments("Choose only one of `--list-visible-windows` or `--visible-window`.")
     }
 
     let accessibilityMode: AccessibilityMode?
@@ -2621,23 +2661,23 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     let captureTextIsSupported = wantsCaptureMenu || wantsVisibleWindowCapture || rawCapturesRectangle || rawCapturesAppWindow
     let rawIsSupported = captureTextIsSupported
     if wantsRawOutput, !rawIsSupported {
-        throw RegionShotError.invalidArguments("`--raw` is only supported for capture output, `--capture-menu`, and `--ascii IMAGE`.")
+        throw BrrainzToolsError.invalidArguments("`--raw` is only supported for capture output, `--capture-menu`, and `--ascii IMAGE`.")
     }
 
     if wantsRawOutput, wantsWithAscii || wantsWithOCR {
-        throw RegionShotError.invalidArguments("`--raw` cannot be combined with `--with-ascii` or `--with-ocr`; raw output can only print the legacy path.")
+        throw BrrainzToolsError.invalidArguments("`--raw` cannot be combined with `--with-ascii` or `--with-ocr`; raw output can only print the legacy path.")
     }
 
     if (wantsWithAscii || wantsWithOCR), !captureTextIsSupported {
-        throw RegionShotError.invalidArguments("`--with-ascii` and `--with-ocr` require a capture mode.")
+        throw BrrainzToolsError.invalidArguments("`--with-ascii` and `--with-ocr` require a capture mode.")
     }
 
     if hasImageOutputOption, !captureTextIsSupported {
-        throw RegionShotError.invalidArguments("`--format`, `--quality`, and `--max-dimension` require a capture mode.")
+        throw BrrainzToolsError.invalidArguments("`--format`, `--quality`, and `--max-dimension` require a capture mode.")
     }
 
     if imageOutput.format != .jpeg, parsed.values["--quality"] != nil {
-        throw RegionShotError.invalidArguments("`--quality` requires `--format jpeg`.")
+        throw BrrainzToolsError.invalidArguments("`--quality` requires `--format jpeg`.")
     }
 
     let captureTextOutput: CaptureTextOptions?
@@ -2667,64 +2707,64 @@ func parse(arguments: [String]) throws -> CommandBehavior {
 
     if displaySelection != nil {
         if parsed.region != nil {
-            throw RegionShotError.invalidArguments("Display capture cannot be combined with rectangle coordinates.")
+            throw BrrainzToolsError.invalidArguments("Display capture cannot be combined with rectangle coordinates.")
         }
 
         if applicationSelector != nil {
-            throw RegionShotError.invalidArguments("Display capture cannot be combined with app selectors (`--app`, `--app-name`, or `--pid`).")
+            throw BrrainzToolsError.invalidArguments("Display capture cannot be combined with app selectors (`--app`, `--app-name`, or `--pid`).")
         }
 
         if windowSelection != nil || windowCrop != nil {
-            throw RegionShotError.invalidArguments("Display capture cannot be combined with app window selection or `--window-crop`.")
+            throw BrrainzToolsError.invalidArguments("Display capture cannot be combined with app window selection or `--window-crop`.")
         }
 
         if wantsWindowList || wantsVisibleWindowList || wantsVisibleWindowCapture || accessibilityMode != nil || menuBarMode != nil {
-            throw RegionShotError.invalidArguments("Display capture cannot be combined with app/window listing, visible-window, menu-bar, or Accessibility modes.")
+            throw BrrainzToolsError.invalidArguments("Display capture cannot be combined with app/window listing, visible-window, menu-bar, or Accessibility modes.")
         }
     }
 
     if wantsNoPrompt, accessibilityMode == nil, menuBarMode == nil {
-        throw RegionShotError.invalidArguments("`--no-prompt` is only supported for Accessibility, menu-bar, and `launch --wait-window` commands.")
+        throw BrrainzToolsError.invalidArguments("`--no-prompt` is only supported for Accessibility, menu-bar, and `launch --wait-window` commands.")
     }
 
     if windowSelection != nil, applicationSelector == nil {
-        throw RegionShotError.invalidArguments("Window selection requires an app selector (`--app`, `--app-name`, or `--pid`).")
+        throw BrrainzToolsError.invalidArguments("Window selection requires an app selector (`--app`, `--app-name`, or `--pid`).")
     }
 
     if windowCrop != nil, applicationSelector == nil {
-        throw RegionShotError.invalidArguments("`--window-crop` requires an app selector (`--app`, `--app-name`, or `--pid`) and a specific window selection.")
+        throw BrrainzToolsError.invalidArguments("`--window-crop` requires an app selector (`--app`, `--app-name`, or `--pid`) and a specific window selection.")
     }
 
     if wantsWindowList, applicationSelector == nil {
-        throw RegionShotError.invalidArguments("`--list-windows` requires an app selector (`--app`, `--app-name`, or `--pid`).")
+        throw BrrainzToolsError.invalidArguments("`--list-windows` requires an app selector (`--app`, `--app-name`, or `--pid`).")
     }
 
     if wantsVisibleWindowList, applicationSelector == nil {
-        throw RegionShotError.invalidArguments("`--list-visible-windows` requires an app selector (`--app`, `--app-name`, or `--pid`).")
+        throw BrrainzToolsError.invalidArguments("`--list-visible-windows` requires an app selector (`--app`, `--app-name`, or `--pid`).")
     }
 
     if wantsVisibleWindowCapture, applicationSelector == nil {
-        throw RegionShotError.invalidArguments("`--visible-window` requires an app selector (`--app`, `--app-name`, or `--pid`).")
+        throw BrrainzToolsError.invalidArguments("`--visible-window` requires an app selector (`--app`, `--app-name`, or `--pid`).")
     }
 
     if menuBarMode != nil, applicationSelector == nil {
-        throw RegionShotError.invalidArguments("Menu-bar inspection and actions require an app selector (`--app`, `--app-name`, or `--pid`).")
+        throw BrrainzToolsError.invalidArguments("Menu-bar inspection and actions require an app selector (`--app`, `--app-name`, or `--pid`).")
     }
 
     if accessibilityMode != nil, applicationSelector == nil {
-        throw RegionShotError.invalidArguments("Accessibility inspection and actions require an app selector (`--app`, `--app-name`, or `--pid`).")
+        throw BrrainzToolsError.invalidArguments("Accessibility inspection and actions require an app selector (`--app`, `--app-name`, or `--pid`).")
     }
 
     if wantsAccessibilityWindowList, windowSelection != nil {
-        throw RegionShotError.invalidArguments("`--list-accessibility-windows` cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`.")
+        throw BrrainzToolsError.invalidArguments("`--list-accessibility-windows` cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`.")
     }
 
     if wantsAccessibilityWaitForWindow, windowSelection != nil {
-        throw RegionShotError.invalidArguments("`--wait-for-window` cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`; pass the expected title as the `--wait-for-window` value.")
+        throw BrrainzToolsError.invalidArguments("`--wait-for-window` cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`; pass the expected title as the `--wait-for-window` value.")
     }
 
     if (wantsAccessibilityTypeText || wantsAccessibilityKeyChord), windowSelection != nil {
-        throw RegionShotError.invalidArguments("`--type` and `--key` cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`; keyboard input is posted to the selected app.")
+        throw BrrainzToolsError.invalidArguments("`--type` and `--key` cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`; keyboard input is posted to the selected app.")
     }
 
     let hasElementTreeOption = parsed.values["--depth"] != nil ||
@@ -2733,155 +2773,155 @@ func parse(arguments: [String]) throws -> CommandBehavior {
         wantsElementTreeInteractiveOnly ||
         wantsElementTreeFlat
     if hasElementTreeOption, !wantsElementList {
-        throw RegionShotError.invalidArguments("`--depth`, `--max-children`, `--roles`, `--interactive`, and `--flat` require `--list-elements`.")
+        throw BrrainzToolsError.invalidArguments("`--depth`, `--max-children`, `--roles`, `--interactive`, and `--flat` require `--list-elements`.")
     }
 
     if wantsWindowList, windowSelection != nil {
-        throw RegionShotError.invalidArguments("`--list-windows` cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`.")
+        throw BrrainzToolsError.invalidArguments("`--list-windows` cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`.")
     }
 
     if wantsWindowList, accessibilityMode != nil {
-        throw RegionShotError.invalidArguments("`--list-windows` cannot be combined with accessibility inspection or action flags.")
+        throw BrrainzToolsError.invalidArguments("`--list-windows` cannot be combined with accessibility inspection or action flags.")
     }
 
     if wantsWindowList, menuBarMode != nil {
-        throw RegionShotError.invalidArguments("`--list-windows` cannot be combined with menu-bar inspection or action flags.")
+        throw BrrainzToolsError.invalidArguments("`--list-windows` cannot be combined with menu-bar inspection or action flags.")
     }
 
     if wantsWindowList, windowCrop != nil {
-        throw RegionShotError.invalidArguments("`--list-windows` cannot be combined with `--window-crop`.")
+        throw BrrainzToolsError.invalidArguments("`--list-windows` cannot be combined with `--window-crop`.")
     }
 
     if wantsWindowList, parsed.region != nil {
-        throw RegionShotError.invalidArguments("`--list-windows` cannot be combined with rectangle coordinates.")
+        throw BrrainzToolsError.invalidArguments("`--list-windows` cannot be combined with rectangle coordinates.")
     }
 
     if wantsWindowList, outputPath != nil {
-        throw RegionShotError.invalidArguments("`--list-windows` returns JSON data and does not use `--output`.")
+        throw BrrainzToolsError.invalidArguments("`--list-windows` returns JSON data and does not use `--output`.")
     }
 
     if wantsWindowList, wantsVisibleWindowCapture || wantsVisibleWindowList {
-        throw RegionShotError.invalidArguments("`--list-windows` cannot be combined with visible-window modes.")
+        throw BrrainzToolsError.invalidArguments("`--list-windows` cannot be combined with visible-window modes.")
     }
 
     if wantsVisibleWindowList, parsed.region != nil {
-        throw RegionShotError.invalidArguments("`--list-visible-windows` cannot be combined with rectangle coordinates.")
+        throw BrrainzToolsError.invalidArguments("`--list-visible-windows` cannot be combined with rectangle coordinates.")
     }
 
     if wantsVisibleWindowList, windowSelection != nil {
-        throw RegionShotError.invalidArguments("`--list-visible-windows` cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`.")
+        throw BrrainzToolsError.invalidArguments("`--list-visible-windows` cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`.")
     }
 
     if wantsVisibleWindowList, windowCrop != nil {
-        throw RegionShotError.invalidArguments("`--list-visible-windows` cannot be combined with `--window-crop`.")
+        throw BrrainzToolsError.invalidArguments("`--list-visible-windows` cannot be combined with `--window-crop`.")
     }
 
     if wantsVisibleWindowList, outputPath != nil {
-        throw RegionShotError.invalidArguments("`--list-visible-windows` returns JSON data and does not use `--output`.")
+        throw BrrainzToolsError.invalidArguments("`--list-visible-windows` returns JSON data and does not use `--output`.")
     }
 
     if wantsVisibleWindowList, accessibilityMode != nil || menuBarMode != nil {
-        throw RegionShotError.invalidArguments("`--list-visible-windows` cannot be combined with menu-bar or Accessibility modes.")
+        throw BrrainzToolsError.invalidArguments("`--list-visible-windows` cannot be combined with menu-bar or Accessibility modes.")
     }
 
     if wantsVisibleWindowCapture, parsed.region != nil {
-        throw RegionShotError.invalidArguments("`--visible-window` cannot be combined with rectangle coordinates.")
+        throw BrrainzToolsError.invalidArguments("`--visible-window` cannot be combined with rectangle coordinates.")
     }
 
     if wantsVisibleWindowCapture, accessibilityMode != nil || menuBarMode != nil || wantsWindowList {
-        throw RegionShotError.invalidArguments("`--visible-window` cannot be combined with ScreenCaptureKit window listing, menu-bar modes, or Accessibility modes.")
+        throw BrrainzToolsError.invalidArguments("`--visible-window` cannot be combined with ScreenCaptureKit window listing, menu-bar modes, or Accessibility modes.")
     }
 
     if menuBarMode != nil, parsed.region != nil {
-        throw RegionShotError.invalidArguments("Menu-bar inspection and actions cannot be combined with rectangle coordinates.")
+        throw BrrainzToolsError.invalidArguments("Menu-bar inspection and actions cannot be combined with rectangle coordinates.")
     }
 
     if menuBarMode != nil, windowSelection != nil {
-        throw RegionShotError.invalidArguments("Menu-bar inspection and actions cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`.")
+        throw BrrainzToolsError.invalidArguments("Menu-bar inspection and actions cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`.")
     }
 
     if menuBarMode != nil, windowCrop != nil {
-        throw RegionShotError.invalidArguments("Menu-bar inspection and actions cannot be combined with `--window-crop`.")
+        throw BrrainzToolsError.invalidArguments("Menu-bar inspection and actions cannot be combined with `--window-crop`.")
     }
 
     if menuBarMode != nil, accessibilityMode != nil {
-        throw RegionShotError.invalidArguments("Menu-bar inspection and actions cannot be combined with window Accessibility inspection or action flags.")
+        throw BrrainzToolsError.invalidArguments("Menu-bar inspection and actions cannot be combined with window Accessibility inspection or action flags.")
     }
 
     if wantsMenuBarList, menuBarSelection != nil {
-        throw RegionShotError.invalidArguments("`--list-menu-bar-items` cannot be combined with `--menu-bar-index` or `--menu-bar-item`.")
+        throw BrrainzToolsError.invalidArguments("`--list-menu-bar-items` cannot be combined with `--menu-bar-index` or `--menu-bar-item`.")
     }
 
     if wantsMenuBarList, outputPath != nil {
-        throw RegionShotError.invalidArguments("`--list-menu-bar-items` returns JSON data and does not use `--output`.")
+        throw BrrainzToolsError.invalidArguments("`--list-menu-bar-items` returns JSON data and does not use `--output`.")
     }
 
     if wantsMenuBarPress, outputPath != nil {
-        throw RegionShotError.invalidArguments("Menu-bar `--press` returns JSON data and does not use `--output`.")
+        throw BrrainzToolsError.invalidArguments("Menu-bar `--press` returns JSON data and does not use `--output`.")
     }
 
     if wantsMenuBarPress, !selector.isEmpty {
-        throw RegionShotError.invalidArguments("Menu-bar `--press` cannot be combined with selector fields. Use `--menu-bar-index` or `--menu-bar-item` to select a menu-bar item.")
+        throw BrrainzToolsError.invalidArguments("Menu-bar `--press` cannot be combined with selector fields. Use `--menu-bar-index` or `--menu-bar-item` to select a menu-bar item.")
     }
 
     if pressMenuItemQuery != nil, outputPath != nil {
-        throw RegionShotError.invalidArguments("`--press-menu-item` returns JSON data and does not use `--output`.")
+        throw BrrainzToolsError.invalidArguments("`--press-menu-item` returns JSON data and does not use `--output`.")
     }
 
     if pressMenuItemQuery != nil, !selector.isEmpty {
-        throw RegionShotError.invalidArguments("`--press-menu-item` cannot be combined with selector fields. Pass the child menu item title, description, or identifier as the `--press-menu-item` value.")
+        throw BrrainzToolsError.invalidArguments("`--press-menu-item` cannot be combined with selector fields. Pass the child menu item title, description, or identifier as the `--press-menu-item` value.")
     }
 
     if menuBarSelection != nil, menuBarMode == nil {
-        throw RegionShotError.invalidArguments("`--menu-bar-index` and `--menu-bar-item` require menu-bar `--press`, `--press-menu-item`, or `--capture-menu`.")
+        throw BrrainzToolsError.invalidArguments("`--menu-bar-index` and `--menu-bar-item` require menu-bar `--press`, `--press-menu-item`, or `--capture-menu`.")
     }
 
     if accessibilityMode != nil, parsed.region != nil {
-        throw RegionShotError.invalidArguments("Accessibility inspection and actions cannot be combined with rectangle coordinates.")
+        throw BrrainzToolsError.invalidArguments("Accessibility inspection and actions cannot be combined with rectangle coordinates.")
     }
 
     if accessibilityMode != nil, windowCrop != nil {
-        throw RegionShotError.invalidArguments("Accessibility inspection and actions cannot be combined with `--window-crop`.")
+        throw BrrainzToolsError.invalidArguments("Accessibility inspection and actions cannot be combined with `--window-crop`.")
     }
 
     if accessibilityMode != nil, outputPath != nil {
-        throw RegionShotError.invalidArguments("Accessibility inspection and actions return JSON data and do not use `--output`.")
+        throw BrrainzToolsError.invalidArguments("Accessibility inspection and actions return JSON data and do not use `--output`.")
     }
 
     if wantsAccessibilityGet, selector.isEmpty {
-        throw RegionShotError.invalidArguments("`--get` (alias: `--get-element`) requires at least one selector field: `--path`, `--role`, `--subrole`, `--title`, `--identifier`, or `--description`.")
+        throw BrrainzToolsError.invalidArguments("`--get` (alias: `--get-element`) requires at least one selector field: `--path`, `--role`, `--subrole`, `--title`, `--identifier`, or `--description`.")
     }
 
     if wantsAccessibilityWaitForElement, selector.isEmpty {
-        throw RegionShotError.invalidArguments("`--wait-for-element` requires at least one selector field: `--path`, `--role`, `--subrole`, `--title`, `--identifier`, or `--description`.")
+        throw BrrainzToolsError.invalidArguments("`--wait-for-element` requires at least one selector field: `--path`, `--role`, `--subrole`, `--title`, `--identifier`, or `--description`.")
     }
 
     if wantsAccessibilitySetValue, selector.isEmpty {
-        throw RegionShotError.invalidArguments("`--set-value` requires at least one selector field: `--path`, `--role`, `--subrole`, `--title`, `--identifier`, or `--description`.")
+        throw BrrainzToolsError.invalidArguments("`--set-value` requires at least one selector field: `--path`, `--role`, `--subrole`, `--title`, `--identifier`, or `--description`.")
     }
 
     if wantsAccessibilityPress, selector.isEmpty {
-        throw RegionShotError.invalidArguments("`--press` (alias: `--press-element`) requires at least one selector field: `--path`, `--role`, `--subrole`, `--title`, `--identifier`, or `--description`.")
+        throw BrrainzToolsError.invalidArguments("`--press` (alias: `--press-element`) requires at least one selector field: `--path`, `--role`, `--subrole`, `--title`, `--identifier`, or `--description`.")
     }
 
     if !wantsAccessibilityGet, !wantsAccessibilityWaitForElement, !wantsAccessibilitySetValue, !wantsAccessibilityPress, !selector.isEmpty {
-        throw RegionShotError.invalidArguments("Selector fields require `--get`/`--get-element`, `--wait-for-element`, `--set-value`, or `--press`/`--press-element`.")
+        throw BrrainzToolsError.invalidArguments("Selector fields require `--get`/`--get-element`, `--wait-for-element`, `--set-value`, or `--press`/`--press-element`.")
     }
 
     if pressPoint != nil, !selector.isEmpty {
-        throw RegionShotError.invalidArguments("`--press-at` cannot be combined with selector fields.")
+        throw BrrainzToolsError.invalidArguments("`--press-at` cannot be combined with selector fields.")
     }
 
     if parsed.region != nil, windowSelection != nil {
-        throw RegionShotError.invalidArguments("Rectangle capture cannot be combined with specific window selection. Choose one capture mode.")
+        throw BrrainzToolsError.invalidArguments("Rectangle capture cannot be combined with specific window selection. Choose one capture mode.")
     }
 
     if parsed.region != nil, windowCrop != nil {
-        throw RegionShotError.invalidArguments("Rectangle capture cannot be combined with `--window-crop`. `--window-crop` is relative to a selected app window.")
+        throw BrrainzToolsError.invalidArguments("Rectangle capture cannot be combined with `--window-crop`. `--window-crop` is relative to a selected app window.")
     }
 
     if windowCrop != nil, windowSelection == nil, !wantsVisibleWindowCapture {
-        throw RegionShotError.invalidArguments("`--window-crop` requires one of `--frontmost-window`, `--window-index`, or `--window-name`.")
+        throw BrrainzToolsError.invalidArguments("`--window-crop` requires one of `--frontmost-window`, `--window-index`, or `--window-name`.")
     }
 
     if let menuBarMode {
@@ -2901,7 +2941,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     }
 
     if applicationSelector != nil, parsed.region == nil, windowSelection == nil, outputPath != nil, !wantsVisibleWindowCapture {
-        throw RegionShotError.invalidArguments("`--output` requires a capture mode. Use rectangle coordinates, `--visible-window`, or one of `--frontmost-window`, `--window-index`, or `--window-name`. `--app` alone lists windows as JSON.")
+        throw BrrainzToolsError.invalidArguments("`--output` requires a capture mode. Use rectangle coordinates, `--visible-window`, or one of `--frontmost-window`, `--window-index`, or `--window-name`. `--app` alone lists windows as JSON.")
     }
 
     if wantsVisibleWindowList {
@@ -2954,7 +2994,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     }
 
     if parsed.region == nil, applicationSelector == nil, displaySelection == nil {
-        throw RegionShotError.invalidArguments("Missing rectangle arguments.")
+        throw BrrainzToolsError.invalidArguments("Missing rectangle arguments.")
     }
 
     let outputURL = try outputURL(from: outputPath, format: imageOutput.format)
@@ -3020,7 +3060,7 @@ private func parseCaptureSubcommand(arguments: [String]) throws -> CommandBehavi
     }
 
     if let first = arguments.first, !first.hasPrefix("--"), Int(first) == nil {
-        throw RegionShotError.invalidArguments("`capture` expects rectangle coordinates or capture flags. Run `regionshot capture --help`.")
+        throw BrrainzToolsError.invalidArguments("`capture` expects rectangle coordinates or capture flags. Run `brrainztools capture --help`.")
     }
 
     let forwardedArguments = try captureSubcommandArguments(arguments)
@@ -3030,7 +3070,7 @@ private func parseCaptureSubcommand(arguments: [String]) throws -> CommandBehavi
     case .capture, .captureVisibleWindow:
         return behavior
     default:
-        throw RegionShotError.invalidArguments("`capture` requires rectangle coordinates, `--display`, `--all-displays`, `--visible-window`, or an app window selection. Use `regionshot windows` to list app windows.")
+        throw BrrainzToolsError.invalidArguments("`capture` requires rectangle coordinates, `--display`, `--all-displays`, `--visible-window`, or an app window selection. Use `brrainztools windows` to list app windows.")
     }
 }
 
@@ -3062,7 +3102,7 @@ private func parseAppsSubcommand(arguments: [String]) throws -> CommandBehavior 
     }
 
     guard !arguments.contains(where: { $0.hasPrefix("--") }) else {
-        throw RegionShotError.invalidArguments("`apps` accepts a search query. Run `regionshot apps --help`.")
+        throw BrrainzToolsError.invalidArguments("`apps` accepts a search query. Run `brrainztools apps --help`.")
     }
 
     return try parse(arguments: ["--find-app", arguments.joined(separator: " ")])
@@ -3074,7 +3114,7 @@ private func parseDisplaysSubcommand(arguments: [String]) throws -> CommandBehav
     }
 
     guard arguments.isEmpty else {
-        throw RegionShotError.invalidArguments("`displays` does not accept additional arguments. Run `regionshot displays --help`.")
+        throw BrrainzToolsError.invalidArguments("`displays` does not accept additional arguments. Run `brrainztools displays --help`.")
     }
 
     return .listDisplays
@@ -3086,7 +3126,7 @@ private func parseASCIISubcommand(arguments: [String]) throws -> CommandBehavior
     }
 
     guard let imagePath = arguments.first, !imagePath.hasPrefix("--") else {
-        throw RegionShotError.invalidArguments("`ascii` requires IMAGE before options. Run `regionshot ascii --help`.")
+        throw BrrainzToolsError.invalidArguments("`ascii` requires IMAGE before options. Run `brrainztools ascii --help`.")
     }
 
     return try parse(arguments: ["--ascii", imagePath] + Array(arguments.dropFirst()))
@@ -3105,13 +3145,13 @@ private func parseWindowsSubcommand(arguments: [String]) throws -> CommandBehavi
         switch argument {
         case "--visible":
             guard !sawModeFlag else {
-                throw RegionShotError.invalidArguments("Choose only one of `--visible` or `--ax` for `windows`.")
+                throw BrrainzToolsError.invalidArguments("Choose only one of `--visible` or `--ax` for `windows`.")
             }
             sawModeFlag = true
             modeFlag = "--list-visible-windows"
         case "--ax":
             guard !sawModeFlag else {
-                throw RegionShotError.invalidArguments("Choose only one of `--visible` or `--ax` for `windows`.")
+                throw BrrainzToolsError.invalidArguments("Choose only one of `--visible` or `--ax` for `windows`.")
             }
             sawModeFlag = true
             modeFlag = "--list-accessibility-windows"
@@ -3216,7 +3256,7 @@ private func translateActionSubcommand(
         if !foundAction, let flag = valueActions[argument] {
             let valueIndex = index + 1
             guard valueIndex < arguments.count else {
-                throw RegionShotError.invalidArguments("`\(name) \(argument)` requires a value. Run `regionshot \(name) --help`.")
+                throw BrrainzToolsError.invalidArguments("`\(name) \(argument)` requires a value. Run `brrainztools \(name) --help`.")
             }
 
             foundAction = true
@@ -3236,10 +3276,10 @@ private func translateActionSubcommand(
 
     guard foundAction else {
         if let unknownAction = firstUnknownActionToken(in: arguments) {
-            throw RegionShotError.invalidArguments("Unknown `\(name)` action `\(unknownAction)`. Run `regionshot \(name) --help`.")
+            throw BrrainzToolsError.invalidArguments("Unknown `\(name)` action `\(unknownAction)`. Run `brrainztools \(name) --help`.")
         }
 
-        throw RegionShotError.invalidArguments("Missing `\(name)` action. Run `regionshot \(name) --help`.")
+        throw BrrainzToolsError.invalidArguments("Missing `\(name)` action. Run `brrainztools \(name) --help`.")
     }
 
     return forwardedArguments + actionArguments
@@ -3315,13 +3355,13 @@ private func parseOptions(arguments: [String]) throws -> (values: [String: Strin
         case "--x", "--y", "--width", "--height", "--display", "--output", "--app", "--app-name", "--pid", "--find-app", "--timeout", "--window-index", "--window-name", "--window-crop", "--menu-bar-index", "--menu-bar-item", "--press-menu-item", "--element-at", "--wait-for-window", "--press-at", "--path", "--role", "--subrole", "--title", "--identifier", "--description", "--set-value", "--type", "--key", "--click", "--drag", "--scroll", "--move-window", "--resize-window", "--depth", "--max-children", "--roles", "--ascii", "--ascii-width", "--ascii-max-height", "--ascii-style", "--ascii-language", "--format", "--quality", "--max-dimension":
             let valueIndex = index + 1
             guard valueIndex < arguments.count else {
-                throw RegionShotError.invalidArguments("Missing value for \(argument).")
+                throw BrrainzToolsError.invalidArguments("Missing value for \(argument).")
             }
 
             values[argument] = arguments[valueIndex]
             index += 2
         default:
-            throw RegionShotError.invalidArguments("Unexpected argument `\(argument)`.")
+            throw BrrainzToolsError.invalidArguments("Unexpected argument `\(argument)`.")
         }
     }
 
@@ -3334,7 +3374,7 @@ func parseClipboardCommand(arguments: [String]) throws -> ClipboardCommand {
     }
 
     guard arguments.count == 2, arguments[0] == "--set" else {
-        throw RegionShotError.invalidArguments("`clipboard` accepts no arguments or `--set TEXT`.")
+        throw BrrainzToolsError.invalidArguments("`clipboard` accepts no arguments or `--set TEXT`.")
     }
 
     return ClipboardCommand(setText: arguments[1])
@@ -3346,11 +3386,11 @@ func parseActivateApplicationCommand(arguments: [String]) throws -> ActivateAppl
     let hasOtherValue = parsed.values.keys.contains { !allowedValueKeys.contains($0) }
 
     if parsed.region != nil || hasOtherValue || !parsed.flags.isEmpty {
-        throw RegionShotError.invalidArguments("`activate` accepts only an app selector (`--app`, `--app-name`, or `--pid`).")
+        throw BrrainzToolsError.invalidArguments("`activate` accepts only an app selector (`--app`, `--app-name`, or `--pid`).")
     }
 
     guard let applicationSelector = try parseApplicationSelector(values: parsed.values) else {
-        throw RegionShotError.invalidArguments("`activate` requires an app selector (`--app`, `--app-name`, or `--pid`).")
+        throw BrrainzToolsError.invalidArguments("`activate` requires an app selector (`--app`, `--app-name`, or `--pid`).")
     }
 
     return ActivateApplicationCommand(applicationSelector: applicationSelector)
@@ -3370,7 +3410,7 @@ func parseLaunchApplicationCommand(arguments: [String]) throws -> LaunchApplicat
         switch argument {
         case "--args":
             guard target != nil else {
-                throw RegionShotError.invalidArguments("`launch` requires PATH|BUNDLE_ID before `--args`.")
+                throw BrrainzToolsError.invalidArguments("`launch` requires PATH|BUNDLE_ID before `--args`.")
             }
             launchArguments = Array(arguments.dropFirst(index + 1))
             index = arguments.count
@@ -3383,17 +3423,17 @@ func parseLaunchApplicationCommand(arguments: [String]) throws -> LaunchApplicat
         case "--timeout":
             let valueIndex = index + 1
             guard valueIndex < arguments.count else {
-                throw RegionShotError.invalidArguments("Missing value for --timeout.")
+                throw BrrainzToolsError.invalidArguments("Missing value for --timeout.")
             }
             timeout = try parseTimeout(arguments[valueIndex])
             index += 2
         default:
             if argument.hasPrefix("--") {
-                throw RegionShotError.invalidArguments("`launch` accepts PATH|BUNDLE_ID, optional `--wait-window`, optional `--no-prompt`, optional `--timeout SECONDS`, and optional `--args ARG ...`.")
+                throw BrrainzToolsError.invalidArguments("`launch` accepts PATH|BUNDLE_ID, optional `--wait-window`, optional `--no-prompt`, optional `--timeout SECONDS`, and optional `--args ARG ...`.")
             }
 
             guard target == nil else {
-                throw RegionShotError.invalidArguments("`launch` accepts exactly one PATH|BUNDLE_ID target before `--args`.")
+                throw BrrainzToolsError.invalidArguments("`launch` accepts exactly one PATH|BUNDLE_ID target before `--args`.")
             }
 
             target = argument
@@ -3402,11 +3442,11 @@ func parseLaunchApplicationCommand(arguments: [String]) throws -> LaunchApplicat
     }
 
     guard let rawTarget = target, let normalizedTarget = normalizedArgumentValue(rawTarget) else {
-        throw RegionShotError.invalidArguments("`launch` requires PATH|BUNDLE_ID.")
+        throw BrrainzToolsError.invalidArguments("`launch` requires PATH|BUNDLE_ID.")
     }
 
     if !promptForAccessibility, !waitForWindow {
-        throw RegionShotError.invalidArguments("`launch --no-prompt` requires `--wait-window`; launch without waiting does not use Accessibility.")
+        throw BrrainzToolsError.invalidArguments("`launch --no-prompt` requires `--wait-window`; launch without waiting does not use Accessibility.")
     }
 
     return LaunchApplicationCommand(
@@ -3451,11 +3491,11 @@ func parseQuitApplicationCommand(arguments: [String]) throws -> QuitApplicationC
     let hasOtherValue = parsed.values.keys.contains { !allowedValueKeys.contains($0) }
 
     if parsed.region != nil || hasOtherValue || !parsed.flags.isEmpty {
-        throw RegionShotError.invalidArguments("`quit` accepts only an app selector (`--app`, `--app-name`, or `--pid`) and optional `--force`.")
+        throw BrrainzToolsError.invalidArguments("`quit` accepts only an app selector (`--app`, `--app-name`, or `--pid`) and optional `--force`.")
     }
 
     guard let applicationSelector = try parseApplicationSelector(values: parsed.values) else {
-        throw RegionShotError.invalidArguments("`quit` requires an app selector (`--app`, `--app-name`, or `--pid`).")
+        throw BrrainzToolsError.invalidArguments("`quit` requires an app selector (`--app`, `--app-name`, or `--pid`).")
     }
 
     return QuitApplicationCommand(applicationSelector: applicationSelector, force: force)
@@ -3470,12 +3510,12 @@ func parseApplicationSelector(values: [String: String]) throws -> ApplicationSel
     }
 
     guard presentSelectorKeys.count == 1 else {
-        throw RegionShotError.invalidArguments("Choose only one of `--app`, `--app-name`, or `--pid`.")
+        throw BrrainzToolsError.invalidArguments("Choose only one of `--app`, `--app-name`, or `--pid`.")
     }
 
     if let rawApp = values["--app"] {
         guard let app = normalizedArgumentValue(rawApp) else {
-            throw RegionShotError.invalidArguments("`--app` requires a non-empty app name, bundle id, or pid.")
+            throw BrrainzToolsError.invalidArguments("`--app` requires a non-empty app name, bundle id, or pid.")
         }
 
         return ApplicationSelector(rawValue: app)
@@ -3483,7 +3523,7 @@ func parseApplicationSelector(values: [String: String]) throws -> ApplicationSel
 
     if let rawAppName = values["--app-name"] {
         guard let appName = normalizedArgumentValue(rawAppName) else {
-            throw RegionShotError.invalidArguments("`--app-name` requires a non-empty app name or bundle id.")
+            throw BrrainzToolsError.invalidArguments("`--app-name` requires a non-empty app name or bundle id.")
         }
 
         return .name(appName)
@@ -3495,7 +3535,7 @@ func parseApplicationSelector(values: [String: String]) throws -> ApplicationSel
 
     let processID = try parseInteger(rawPID, flag: "--pid")
     guard processID > 0, let pid = Int32(exactly: processID) else {
-        throw RegionShotError.invalidArguments("`--pid` requires a positive 32-bit process id.")
+        throw BrrainzToolsError.invalidArguments("`--pid` requires a positive 32-bit process id.")
     }
 
     return .processID(pid)
@@ -3506,7 +3546,7 @@ private func parseDisplayCaptureSelection(_ parsed: ParsedArguments) throws -> D
     let rawDisplayID = parsed.values["--display"]
 
     if wantsAllDisplays, rawDisplayID != nil {
-        throw RegionShotError.invalidArguments("Choose only one of `--display DISPLAY_ID` or `--all-displays`.")
+        throw BrrainzToolsError.invalidArguments("Choose only one of `--display DISPLAY_ID` or `--all-displays`.")
     }
 
     if wantsAllDisplays {
@@ -3518,12 +3558,12 @@ private func parseDisplayCaptureSelection(_ parsed: ParsedArguments) throws -> D
     }
 
     guard let trimmedDisplayID = normalizedArgumentValue(rawDisplayID) else {
-        throw RegionShotError.invalidArguments("`--display` requires a display id from `--list-displays`.")
+        throw BrrainzToolsError.invalidArguments("`--display` requires a display id from `--list-displays`.")
     }
 
     let displayID = try parseInteger(trimmedDisplayID, flag: "--display")
     guard displayID > 0, displayID <= Int(UInt32.max) else {
-        throw RegionShotError.invalidArguments("`--display` requires a positive 32-bit display id from `--list-displays`.")
+        throw BrrainzToolsError.invalidArguments("`--display` requires a positive 32-bit display id from `--list-displays`.")
     }
 
     return .displayID(CGDirectDisplayID(displayID))
@@ -3538,7 +3578,7 @@ private func parseFlaggedRegion(values: [String: String]) throws -> CaptureRegio
     }
 
     guard presentKeys.count == rectangleKeys.count else {
-        throw RegionShotError.invalidArguments("Expected all of `--x`, `--y`, `--width`, and `--height` when using flagged rectangle coordinates.")
+        throw BrrainzToolsError.invalidArguments("Expected all of `--x`, `--y`, `--width`, and `--height` when using flagged rectangle coordinates.")
     }
 
     let region = try CaptureRegion(
@@ -3562,7 +3602,7 @@ private func parseWindowSelection(_ parsed: ParsedArguments) throws -> WindowSel
     if let rawIndex = parsed.values["--window-index"] {
         let index = try parseInteger(rawIndex, flag: "--window-index")
         guard index >= 0 else {
-            throw RegionShotError.invalidArguments("`--window-index` must be zero or greater.")
+            throw BrrainzToolsError.invalidArguments("`--window-index` must be zero or greater.")
         }
         selections.append(.index(index))
     }
@@ -3570,13 +3610,13 @@ private func parseWindowSelection(_ parsed: ParsedArguments) throws -> WindowSel
     if let windowName = parsed.values["--window-name"] {
         let trimmed = windowName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            throw RegionShotError.invalidArguments("`--window-name` requires a non-empty title.")
+            throw BrrainzToolsError.invalidArguments("`--window-name` requires a non-empty title.")
         }
         selections.append(.name(trimmed))
     }
 
     guard selections.count <= 1 else {
-        throw RegionShotError.invalidArguments("Choose only one of `--frontmost-window`, `--window-index`, or `--window-name`.")
+        throw BrrainzToolsError.invalidArguments("Choose only one of `--frontmost-window`, `--window-index`, or `--window-name`.")
     }
 
     return selections.first
@@ -3588,7 +3628,7 @@ private func parseMenuBarSelection(_ parsed: ParsedArguments) throws -> MenuBarS
     if let rawIndex = parsed.values["--menu-bar-index"] {
         let index = try parseInteger(rawIndex, flag: "--menu-bar-index")
         guard index >= 0 else {
-            throw RegionShotError.invalidArguments("`--menu-bar-index` must be zero or greater.")
+            throw BrrainzToolsError.invalidArguments("`--menu-bar-index` must be zero or greater.")
         }
         selections.append(.index(index))
     }
@@ -3596,13 +3636,13 @@ private func parseMenuBarSelection(_ parsed: ParsedArguments) throws -> MenuBarS
     if let itemName = parsed.values["--menu-bar-item"] {
         let trimmed = itemName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            throw RegionShotError.invalidArguments("`--menu-bar-item` requires a non-empty title, description, or identifier.")
+            throw BrrainzToolsError.invalidArguments("`--menu-bar-item` requires a non-empty title, description, or identifier.")
         }
         selections.append(.name(trimmed))
     }
 
     guard selections.count <= 1 else {
-        throw RegionShotError.invalidArguments("Choose only one of `--menu-bar-index` or `--menu-bar-item`.")
+        throw BrrainzToolsError.invalidArguments("Choose only one of `--menu-bar-index` or `--menu-bar-item`.")
     }
 
     return selections.first
@@ -3618,7 +3658,7 @@ private func parseWindowCrop(_ rawValue: String?) throws -> WindowCropRect? {
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     guard components.count == 4 else {
-        throw RegionShotError.invalidArguments("`--window-crop` must use `x,y,width,height`.")
+        throw BrrainzToolsError.invalidArguments("`--window-crop` must use `x,y,width,height`.")
     }
 
     let crop = try WindowCropRect(
@@ -3629,11 +3669,11 @@ private func parseWindowCrop(_ rawValue: String?) throws -> WindowCropRect? {
     )
 
     guard crop.x >= 0, crop.y >= 0 else {
-        throw RegionShotError.invalidArguments("`--window-crop` requires non-negative x and y coordinates.")
+        throw BrrainzToolsError.invalidArguments("`--window-crop` requires non-negative x and y coordinates.")
     }
 
     guard crop.width > 0, crop.height > 0 else {
-        throw RegionShotError.invalidArguments("`--window-crop` width and height must be greater than zero.")
+        throw BrrainzToolsError.invalidArguments("`--window-crop` width and height must be greater than zero.")
     }
 
     return crop
@@ -3649,7 +3689,7 @@ private func parseWindowPoint(_ rawValue: String?, flag: String) throws -> Windo
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     guard components.count == 2 else {
-        throw RegionShotError.invalidArguments("`\(flag)` must use `x,y`.")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` must use `x,y`.")
     }
 
     let point = try WindowPoint(
@@ -3658,7 +3698,7 @@ private func parseWindowPoint(_ rawValue: String?, flag: String) throws -> Windo
     )
 
     guard point.x >= 0, point.y >= 0 else {
-        throw RegionShotError.invalidArguments("`\(flag)` requires non-negative x and y coordinates.")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` requires non-negative x and y coordinates.")
     }
 
     return point
@@ -3674,7 +3714,7 @@ private func parseWindowDrag(_ rawValue: String?, flag: String) throws -> Window
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     guard components.count == 4 else {
-        throw RegionShotError.invalidArguments("`\(flag)` must use `x1,y1,x2,y2`.")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` must use `x1,y1,x2,y2`.")
     }
 
     let start = try WindowPoint(
@@ -3687,7 +3727,7 @@ private func parseWindowDrag(_ rawValue: String?, flag: String) throws -> Window
     )
 
     guard start.x >= 0, start.y >= 0, end.x >= 0, end.y >= 0 else {
-        throw RegionShotError.invalidArguments("`\(flag)` requires non-negative window coordinates.")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` requires non-negative window coordinates.")
     }
 
     return WindowDrag(start: start, end: end)
@@ -3703,18 +3743,18 @@ private func parseScrollDelta(_ rawValue: String?, flag: String) throws -> Scrol
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     guard components.count == 2 else {
-        throw RegionShotError.invalidArguments("`\(flag)` must use `dx,dy`.")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` must use `dx,dy`.")
     }
 
     let x = try parseInteger(components[0], flag: flag)
     let y = try parseInteger(components[1], flag: flag)
 
     guard x != 0 || y != 0 else {
-        throw RegionShotError.invalidArguments("`\(flag)` requires a non-zero x or y delta.")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` requires a non-zero x or y delta.")
     }
 
     guard let deltaX = Int32(exactly: x), let deltaY = Int32(exactly: y) else {
-        throw RegionShotError.invalidArguments("`\(flag)` deltas must fit in a 32-bit signed integer.")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` deltas must fit in a 32-bit signed integer.")
     }
 
     return ScrollDelta(x: deltaX, y: deltaY)
@@ -3730,7 +3770,7 @@ private func parseWindowPosition(_ rawValue: String?, flag: String) throws -> Wi
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     guard components.count == 2 else {
-        throw RegionShotError.invalidArguments("`\(flag)` must use `x,y`.")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` must use `x,y`.")
     }
 
     return try WindowPosition(
@@ -3749,7 +3789,7 @@ private func parseWindowSize(_ rawValue: String?, flag: String) throws -> Window
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     guard components.count == 2 else {
-        throw RegionShotError.invalidArguments("`\(flag)` must use `width,height`.")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` must use `width,height`.")
     }
 
     let size = try WindowSize(
@@ -3758,7 +3798,7 @@ private func parseWindowSize(_ rawValue: String?, flag: String) throws -> Window
     )
 
     guard size.width > 0, size.height > 0 else {
-        throw RegionShotError.invalidArguments("`\(flag)` width and height must be greater than zero.")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` width and height must be greater than zero.")
     }
 
     return size
@@ -3771,7 +3811,7 @@ private func parseKeyChord(_ rawValue: String?) throws -> KeyChord? {
 
     let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else {
-        throw RegionShotError.invalidArguments("`--key` requires a non-empty key chord.")
+        throw BrrainzToolsError.invalidArguments("`--key` requires a non-empty key chord.")
     }
 
     let parts = trimmed
@@ -3779,7 +3819,7 @@ private func parseKeyChord(_ rawValue: String?) throws -> KeyChord? {
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     guard !parts.contains(where: \.isEmpty) else {
-        throw RegionShotError.invalidArguments("`--key` chord contains an empty component.")
+        throw BrrainzToolsError.invalidArguments("`--key` chord contains an empty component.")
     }
 
     var modifiers: [KeyModifier] = []
@@ -3796,12 +3836,12 @@ private func parseKeyChord(_ rawValue: String?) throws -> KeyChord? {
     }
 
     guard keyNames.count == 1, let keyName = keyNames.first else {
-        throw RegionShotError.invalidArguments("`--key` requires exactly one non-modifier key, for example `cmd+s` or `escape`.")
+        throw BrrainzToolsError.invalidArguments("`--key` requires exactly one non-modifier key, for example `cmd+s` or `escape`.")
     }
 
     let normalizedKey = normalizedKeyChordComponent(keyName)
     guard let keyCode = keyCodeByName[normalizedKey] else {
-        throw RegionShotError.invalidArguments("Unsupported `--key` key `\(keyName)`.")
+        throw BrrainzToolsError.invalidArguments("Unsupported `--key` key `\(keyName)`.")
     }
 
     return KeyChord(
@@ -3878,24 +3918,24 @@ private func validateAccessibilitySelector(_ selector: AccessibilitySelector) th
     try validateAccessibilityPath(path)
 
     if selector.hasNonPathFields {
-        throw RegionShotError.invalidArguments("`--path` cannot be combined with `--role`, `--subrole`, `--title`, `--identifier`, or `--description`; paths already identify one element.")
+        throw BrrainzToolsError.invalidArguments("`--path` cannot be combined with `--role`, `--subrole`, `--title`, `--identifier`, or `--description`; paths already identify one element.")
     }
 }
 
 private func validateAccessibilityPath(_ path: String) throws {
     let components = path.split(separator: ".", omittingEmptySubsequences: false)
     guard !components.isEmpty else {
-        throw RegionShotError.invalidArguments("`--path` requires a dot-separated element path such as `0.3.1`.")
+        throw BrrainzToolsError.invalidArguments("`--path` requires a dot-separated element path such as `0.3.1`.")
     }
 
     for component in components {
         guard !component.isEmpty, component.allSatisfy(\.isNumber) else {
-            throw RegionShotError.invalidArguments("`--path` requires dot-separated non-negative child indices, for example `0.3.1`.")
+            throw BrrainzToolsError.invalidArguments("`--path` requires dot-separated non-negative child indices, for example `0.3.1`.")
         }
     }
 
     guard components.first == "0" else {
-        throw RegionShotError.invalidArguments("`--path` must start at the selected window root `0`.")
+        throw BrrainzToolsError.invalidArguments("`--path` must start at the selected window root `0`.")
     }
 }
 
@@ -3919,7 +3959,7 @@ private func outputURL(from path: String?, format: ImageOutputFormat) throws -> 
 private func inputURL(from path: String) throws -> URL {
     let trimmedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedPath.isEmpty else {
-        throw RegionShotError.invalidArguments("Expected a non-empty file path.")
+        throw BrrainzToolsError.invalidArguments("Expected a non-empty file path.")
     }
 
     return fileURL(from: trimmedPath)
@@ -3941,13 +3981,13 @@ private func fileURL(from path: String) -> URL {
 
 private func temporaryOutputURL(format: ImageOutputFormat = .png) -> URL {
     FileManager.default.temporaryDirectory
-        .appendingPathComponent("regionshot-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString.lowercased())")
+        .appendingPathComponent("brrainztools-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString.lowercased())")
         .appendingPathExtension(format.fileExtension)
 }
 
 private func parseInteger(_ value: String, flag: String) throws -> Int {
     guard let integer = Int(value) else {
-        throw RegionShotError.invalidInteger(flag: flag, value: value)
+        throw BrrainzToolsError.invalidInteger(flag: flag, value: value)
     }
 
     return integer
@@ -3965,7 +4005,7 @@ private func parseBoundedIntegerOption(
 
     let value = try parseInteger(rawValue, flag: flag)
     guard allowedRange.contains(value) else {
-        throw RegionShotError.invalidArguments("`\(flag)` must be between \(allowedRange.lowerBound) and \(allowedRange.upperBound).")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` must be between \(allowedRange.lowerBound) and \(allowedRange.upperBound).")
     }
 
     return value
@@ -3977,7 +4017,7 @@ private func parseTimeout(_ rawValue: String?) throws -> TimeInterval {
     }
 
     guard let timeout = TimeInterval(rawValue), timeout > 0 else {
-        throw RegionShotError.invalidArguments("`--timeout` requires a positive number of seconds.")
+        throw BrrainzToolsError.invalidArguments("`--timeout` requires a positive number of seconds.")
     }
 
     return timeout
@@ -4011,7 +4051,7 @@ private func parseImageOutputFormat(_ rawValue: String?) throws -> ImageOutputFo
     case "jpg", "jpeg":
         return .jpeg
     default:
-        throw RegionShotError.invalidArguments("`--format` must be `png` or `jpeg`, got `\(rawValue)`.")
+        throw BrrainzToolsError.invalidArguments("`--format` must be `png` or `jpeg`, got `\(rawValue)`.")
     }
 }
 
@@ -4021,7 +4061,7 @@ private func parseJPEGQuality(_ rawValue: String?) throws -> Double {
     }
 
     guard let quality = Double(rawValue), quality >= 0, quality <= 1 else {
-        throw RegionShotError.invalidArguments("`--quality` must be a number from 0 to 1.")
+        throw BrrainzToolsError.invalidArguments("`--quality` must be a number from 0 to 1.")
     }
 
     return quality
@@ -4034,7 +4074,7 @@ private func parseImageMaxDimension(_ rawValue: String?) throws -> Int? {
 
     let maxDimension = try parseInteger(rawValue, flag: "--max-dimension")
     guard imageMaxDimensionRange.contains(maxDimension) else {
-        throw RegionShotError.invalidArguments("`--max-dimension` must be between \(imageMaxDimensionRange.lowerBound) and \(imageMaxDimensionRange.upperBound).")
+        throw BrrainzToolsError.invalidArguments("`--max-dimension` must be between \(imageMaxDimensionRange.lowerBound) and \(imageMaxDimensionRange.upperBound).")
     }
 
     return maxDimension
@@ -4047,11 +4087,11 @@ private func parseAsciiStyle(_ rawValue: String?) throws -> AsciiArtStyle {
 
     let normalizedValue = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard !normalizedValue.isEmpty else {
-        throw RegionShotError.invalidArguments("`--ascii-style` requires `layout` or `tone`.")
+        throw BrrainzToolsError.invalidArguments("`--ascii-style` requires `layout` or `tone`.")
     }
 
     guard let style = AsciiArtStyle(rawValue: normalizedValue) else {
-        throw RegionShotError.invalidArguments("`--ascii-style` must be `layout` or `tone`, got `\(rawValue)`.")
+        throw BrrainzToolsError.invalidArguments("`--ascii-style` must be `layout` or `tone`, got `\(rawValue)`.")
     }
 
     return style
@@ -4067,7 +4107,7 @@ func parseOCRLanguages(_ rawValue: String?) throws -> [String] {
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     guard !languages.isEmpty, languages.allSatisfy({ !$0.isEmpty }) else {
-        throw RegionShotError.invalidArguments("`--ascii-language` requires one or more comma-separated language codes.")
+        throw BrrainzToolsError.invalidArguments("`--ascii-language` requires one or more comma-separated language codes.")
     }
 
     return languages
@@ -4083,7 +4123,7 @@ private func parseAccessibilityRoles(_ rawValue: String?) throws -> Set<String> 
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     guard !roles.isEmpty, roles.allSatisfy({ !$0.isEmpty }) else {
-        throw RegionShotError.invalidArguments("`--roles` requires one or more comma-separated accessibility roles.")
+        throw BrrainzToolsError.invalidArguments("`--roles` requires one or more comma-separated accessibility roles.")
     }
 
     return Set(roles)
@@ -4101,7 +4141,7 @@ private func parseAsciiDimension(
 
     let dimension = try parseInteger(rawValue, flag: flag)
     guard allowedRange.contains(dimension) else {
-        throw RegionShotError.invalidArguments("`\(flag)` must be between \(allowedRange.lowerBound) and \(allowedRange.upperBound).")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` must be between \(allowedRange.lowerBound) and \(allowedRange.upperBound).")
     }
 
     return dimension
@@ -4113,7 +4153,7 @@ func captureRegionForDisplayFrame(_ frame: CGRect) throws -> CaptureRegion {
 
 func captureRegionForDisplayFrames(_ frames: [CGRect]) throws -> CaptureRegion {
     guard let firstFrame = frames.first else {
-        throw RegionShotError.captureFailed("No active displays were found.")
+        throw BrrainzToolsError.captureFailed("No active displays were found.")
     }
 
     let unionFrame = frames.dropFirst().reduce(firstFrame) { partialResult, frame in
@@ -4140,7 +4180,7 @@ private func captureRegion(for displaySelection: DisplayCaptureSelection) throws
     switch displaySelection {
     case .displayID(let displayID):
         guard let frame = frames.first(where: { $0.id == displayID })?.frame else {
-            throw RegionShotError.invalidArguments("No active display has id \(displayID). Run `regionshot --list-displays` to see display ids.")
+            throw BrrainzToolsError.invalidArguments("No active display has id \(displayID). Run `brrainztools --list-displays` to see display ids.")
         }
 
         return try captureRegionForDisplayFrame(frame)
@@ -4151,11 +4191,11 @@ private func captureRegion(for displaySelection: DisplayCaptureSelection) throws
 
 private func validate(region: CaptureRegion) throws {
     guard region.width > 0 else {
-        throw RegionShotError.invalidRegion("Width must be greater than zero.")
+        throw BrrainzToolsError.invalidRegion("Width must be greater than zero.")
     }
 
     guard region.height > 0 else {
-        throw RegionShotError.invalidRegion("Height must be greater than zero.")
+        throw BrrainzToolsError.invalidRegion("Height must be greater than zero.")
     }
 }
 
@@ -4195,7 +4235,7 @@ private func capture(using command: CaptureCommand) async throws {
         }
 
         guard let region = command.region else {
-            throw RegionShotError.invalidArguments("App-filtered rectangle capture requires rectangle coordinates.")
+            throw BrrainzToolsError.invalidArguments("App-filtered rectangle capture requires rectangle coordinates.")
         }
 
         try await captureApplicationRegion(
@@ -4212,7 +4252,7 @@ private func capture(using command: CaptureCommand) async throws {
     }
 
     guard let region = command.region else {
-        throw RegionShotError.invalidArguments("Rectangle capture requires coordinates when no app is specified.")
+        throw BrrainzToolsError.invalidArguments("Rectangle capture requires coordinates when no app is specified.")
     }
 
     try await captureScreenRegion(
@@ -4257,7 +4297,7 @@ func captureScreenRegion(
     try await runCapture(region, outputURL)
 
     guard fileExists(outputURL.path) else {
-        throw RegionShotError.captureFailed("Capture succeeded but no PNG was written to \(outputURL.path).")
+        throw BrrainzToolsError.captureFailed("Capture succeeded but no PNG was written to \(outputURL.path).")
     }
 }
 
@@ -4338,7 +4378,7 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
 
     switch command.mode {
     case .waitForWindow, .typeText, .keyChord:
-        throw RegionShotError.accessibilityQueryFailed("Internal error: an app-level accessibility action reached the selected-window execution path.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Internal error: an app-level accessibility action reached the selected-window execution path.")
     case .listWindows:
         let response = AccessibilityWindowListResponse(
             application: windowListApplication(for: catalog.application),
@@ -4652,7 +4692,7 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
         return try encodeJSON(response)
     case .closeWindow:
         guard let closeButton = copyAXElement(from: accessibilityWindow, attribute: kAXCloseButtonAttribute as CFString) else {
-            throw RegionShotError.accessibilityQueryFailed("Selected window \(formatAXElement(accessibilityWindow)) does not expose an `AXCloseButton`.")
+            throw BrrainzToolsError.accessibilityQueryFailed("Selected window \(formatAXElement(accessibilityWindow)) does not expose an `AXCloseButton`.")
         }
 
         let targetSnapshot = accessibilityElementResponse(
@@ -4690,7 +4730,7 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
         return try encodeJSON(response)
     case .minimizeWindow:
         guard let minimizeButton = copyAXElement(from: accessibilityWindow, attribute: kAXMinimizeButtonAttribute as CFString) else {
-            throw RegionShotError.accessibilityQueryFailed("Selected window \(formatAXElement(accessibilityWindow)) does not expose an `AXMinimizeButton`.")
+            throw BrrainzToolsError.accessibilityQueryFailed("Selected window \(formatAXElement(accessibilityWindow)) does not expose an `AXMinimizeButton`.")
         }
 
         let targetSnapshot = accessibilityElementResponse(
@@ -4764,7 +4804,7 @@ private func handleMenuBar(using command: MenuBarCommand) async throws -> String
     case .pressMenuItem(let childSelection):
         let item = try selectMenuBarItem(from: catalog, using: command.selection)
         guard let menu = try activateMenuBarItem(item, requireVisibleMenu: true) else {
-            throw RegionShotError.accessibilityQueryFailed("No visible AX menu appeared after pressing \(formatMenuBarCandidate(item)).")
+            throw BrrainzToolsError.accessibilityQueryFailed("No visible AX menu appeared after pressing \(formatMenuBarCandidate(item)).")
         }
 
         do {
@@ -4850,8 +4890,8 @@ private func captureVisibleWindow(using command: VisibleWindowCaptureCommand) as
             timeout: command.screenCaptureTimeout,
             imageOutput: command.imageOutput
         )
-    } catch RegionShotError.captureFailed(let message) {
-        throw RegionShotError.captureFailed("Failed to capture visible window [\(window.index)] \(displayTitle(window.title)) for `\(catalog.application.name)` at `\(region.rectangleArgument)`: \(message)")
+    } catch BrrainzToolsError.captureFailed(let message) {
+        throw BrrainzToolsError.captureFailed("Failed to capture visible window [\(window.index)] \(displayTitle(window.title)) for `\(catalog.application.name)` at `\(region.rectangleArgument)`: \(message)")
     }
 }
 
@@ -4951,15 +4991,15 @@ private func captureOutputEnvelopeJSON(
 
 private func loadImage(at imageURL: URL) throws -> CGImage {
     guard FileManager.default.fileExists(atPath: imageURL.path) else {
-        throw RegionShotError.captureFailed("Image file not found: \(imageURL.path)")
+        throw BrrainzToolsError.captureFailed("Image file not found: \(imageURL.path)")
     }
 
     guard let source = CGImageSourceCreateWithURL(imageURL as CFURL, nil) else {
-        throw RegionShotError.captureFailed("Failed to read image data from \(imageURL.path).")
+        throw BrrainzToolsError.captureFailed("Failed to read image data from \(imageURL.path).")
     }
 
     guard let image = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCache: true] as CFDictionary) else {
-        throw RegionShotError.captureFailed("Failed to decode an image from \(imageURL.path).")
+        throw BrrainzToolsError.captureFailed("Failed to decode an image from \(imageURL.path).")
     }
 
     return image
@@ -4967,11 +5007,11 @@ private func loadImage(at imageURL: URL) throws -> CGImage {
 
 func renderAsciiArt(from image: CGImage, options: AsciiArtOptions) throws -> RenderedAsciiArt {
     guard image.width > 0, image.height > 0 else {
-        throw RegionShotError.captureFailed("Cannot render ASCII art for an empty image.")
+        throw BrrainzToolsError.captureFailed("Cannot render ASCII art for an empty image.")
     }
 
     guard options.width > 0, options.maxHeight > 0 else {
-        throw RegionShotError.invalidArguments("ASCII width and max height must be greater than zero.")
+        throw BrrainzToolsError.invalidArguments("ASCII width and max height must be greater than zero.")
     }
 
     let targetWidth = options.width
@@ -5017,11 +5057,11 @@ func renderAsciiArt(from image: CGImage, options: AsciiArtOptions) throws -> Ren
 
 func renderAsciiLayout(from image: CGImage, options: AsciiLayoutOptions, textBlocks: [OCRTextBlock]) throws -> RenderedAsciiArt {
     guard image.width > 0, image.height > 0 else {
-        throw RegionShotError.captureFailed("Cannot render ASCII layout for an empty image.")
+        throw BrrainzToolsError.captureFailed("Cannot render ASCII layout for an empty image.")
     }
 
     guard options.width > 0, options.maxHeight > 0 else {
-        throw RegionShotError.invalidArguments("ASCII width and max height must be greater than zero.")
+        throw BrrainzToolsError.invalidArguments("ASCII width and max height must be greater than zero.")
     }
 
     let targetWidth = options.width
@@ -5087,7 +5127,7 @@ private func renderImagePixels(
 
     try pixels.withUnsafeMutableBytes { rawBuffer in
         guard let baseAddress = rawBuffer.baseAddress else {
-            throw RegionShotError.captureFailed("Failed to allocate an \(failureContext) render buffer.")
+            throw BrrainzToolsError.captureFailed("Failed to allocate an \(failureContext) render buffer.")
         }
 
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
@@ -5103,7 +5143,7 @@ private func renderImagePixels(
             space: colorSpace,
             bitmapInfo: bitmapInfo
         ) else {
-            throw RegionShotError.captureFailed("Failed to create an \(failureContext) render context.")
+            throw BrrainzToolsError.captureFailed("Failed to create an \(failureContext) render context.")
         }
 
         let targetRect = CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight)
@@ -5442,7 +5482,7 @@ private func recognizeTextBlocks(in image: CGImage, recognitionLanguages: [Strin
 }
 
 private func withSuppressedStandardOutput<T>(_ operation: () async throws -> T) async throws -> T {
-    // Vision may emit model diagnostics directly to stdout; keep RegionShot's JSON channel clean.
+    // Vision may emit model diagnostics directly to stdout; keep BrrainzTools's JSON channel clean.
     fflush(stdout)
 
     let originalStandardOutput = dup(STDOUT_FILENO)
@@ -5494,7 +5534,7 @@ private func normalizedImageForOCR(_ image: CGImage) throws -> CGImage {
 
     return try pixels.withUnsafeMutableBytes { rawBuffer in
         guard let baseAddress = rawBuffer.baseAddress else {
-            throw RegionShotError.captureFailed("Failed to allocate an OCR image buffer.")
+            throw BrrainzToolsError.captureFailed("Failed to allocate an OCR image buffer.")
         }
 
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
@@ -5510,7 +5550,7 @@ private func normalizedImageForOCR(_ image: CGImage) throws -> CGImage {
             space: colorSpace,
             bitmapInfo: bitmapInfo
         ) else {
-            throw RegionShotError.captureFailed("Failed to create an OCR image context.")
+            throw BrrainzToolsError.captureFailed("Failed to create an OCR image context.")
         }
 
         let imageRect = CGRect(x: 0, y: 0, width: width, height: height)
@@ -5520,7 +5560,7 @@ private func normalizedImageForOCR(_ image: CGImage) throws -> CGImage {
         context.draw(image, in: imageRect)
 
         guard let normalizedImage = context.makeImage() else {
-            throw RegionShotError.captureFailed("Failed to prepare image data for OCR.")
+            throw BrrainzToolsError.captureFailed("Failed to prepare image data for OCR.")
         }
 
         return normalizedImage
@@ -5685,7 +5725,7 @@ func encodeJSON<T: Encodable>(_ value: T) throws -> String {
     let data = try encoder.encode(value)
 
     guard let json = String(data: data, encoding: .utf8) else {
-        throw RegionShotError.encodeFailed("Failed to encode the response as UTF-8 JSON.")
+        throw BrrainzToolsError.encodeFailed("Failed to encode the response as UTF-8 JSON.")
     }
 
     return json
@@ -5697,19 +5737,19 @@ private func encodeJSONString(_ value: String) throws -> String {
     let data = try encoder.encode(value)
 
     guard let json = String(data: data, encoding: .utf8) else {
-        throw RegionShotError.encodeFailed("Failed to encode the response as UTF-8 JSON.")
+        throw BrrainzToolsError.encodeFailed("Failed to encode the response as UTF-8 JSON.")
     }
 
     return json
 }
 
-func dataEnvelopeJSON(mode: String, dataJSON: String, version: String = currentRegionShotVersion()) throws -> String {
+func dataEnvelopeJSON(mode: String, dataJSON: String, version: String = currentBrrainzToolsVersion()) throws -> String {
     let modeJSON = try encodeJSONString(mode)
     let versionJSON = try encodeJSONString(version)
     return #"{"data":\#(dataJSON),"mode":\#(modeJSON),"ok":true,"version":\#(versionJSON)}"#
 }
 
-func basicEnvelopeJSON(mode: String, version: String = currentRegionShotVersion()) throws -> String {
+func basicEnvelopeJSON(mode: String, version: String = currentBrrainzToolsVersion()) throws -> String {
     try encodeJSON(
         BasicEnvelope(
             mode: mode,
@@ -5719,7 +5759,7 @@ func basicEnvelopeJSON(mode: String, version: String = currentRegionShotVersion(
     )
 }
 
-func outputEnvelopeJSON(mode: String, output: String, version: String = currentRegionShotVersion()) throws -> String {
+func outputEnvelopeJSON(mode: String, output: String, version: String = currentBrrainzToolsVersion()) throws -> String {
     try encodeJSON(
         OutputEnvelope(
             mode: mode,
@@ -5730,14 +5770,14 @@ func outputEnvelopeJSON(mode: String, output: String, version: String = currentR
     )
 }
 
-func outputDataEnvelopeJSON(mode: String, output: String, dataJSON: String, version: String = currentRegionShotVersion()) throws -> String {
+func outputDataEnvelopeJSON(mode: String, output: String, dataJSON: String, version: String = currentBrrainzToolsVersion()) throws -> String {
     let modeJSON = try encodeJSONString(mode)
     let outputJSON = try encodeJSONString(output)
     let versionJSON = try encodeJSONString(version)
     return #"{"data":\#(dataJSON),"mode":\#(modeJSON),"ok":true,"output":\#(outputJSON),"version":\#(versionJSON)}"#
 }
 
-func reportEnvelopeJSON(mode: String, report: String, version: String = currentRegionShotVersion()) throws -> String {
+func reportEnvelopeJSON(mode: String, report: String, version: String = currentBrrainzToolsVersion()) throws -> String {
     try encodeJSON(
         ReportEnvelope(
             mode: mode,
@@ -5748,7 +5788,7 @@ func reportEnvelopeJSON(mode: String, report: String, version: String = currentR
     )
 }
 
-func outputReportEnvelopeJSON(mode: String, output: String, report: String, version: String = currentRegionShotVersion()) throws -> String {
+func outputReportEnvelopeJSON(mode: String, output: String, report: String, version: String = currentBrrainzToolsVersion()) throws -> String {
     try encodeJSON(
         OutputReportEnvelope(
             mode: mode,
@@ -5760,7 +5800,7 @@ func outputReportEnvelopeJSON(mode: String, output: String, report: String, vers
     )
 }
 
-func errorEnvelopeJSON(error: RegionShotError, version: String = currentRegionShotVersion()) throws -> String {
+func errorEnvelopeJSON(error: BrrainzToolsError, version: String = currentBrrainzToolsVersion()) throws -> String {
     try encodeJSON(
         ErrorEnvelope(
             error: ErrorEntry(
@@ -5822,7 +5862,7 @@ func windowlessApplicationMessage(
         policyNote = ""
     }
 
-    return "`\(name)` was found (pid \(processID)\(bundleSummary)), but macOS exposed no \(windowKind) windows for it.\(policyNote) \(modeDescription) Use `--list-menu-bar-items` and `--capture-menu` for menu-bar/status-item UI, use rectangle capture (`regionshot X Y WIDTH HEIGHT`) for raw visible pixels, or open a normal app window first."
+    return "`\(name)` was found (pid \(processID)\(bundleSummary)), but macOS exposed no \(windowKind) windows for it.\(policyNote) \(modeDescription) Use `--list-menu-bar-items` and `--capture-menu` for menu-bar/status-item UI, use rectangle capture (`brrainztools X Y WIDTH HEIGHT`) for raw visible pixels, or open a normal app window first."
 }
 
 private func windowListEntry(for window: CatalogWindow) -> WindowListEntry {
@@ -5903,7 +5943,7 @@ private func buildMenuBarItemCatalog(selector: ApplicationSelector) throws -> Me
     )
 
     guard !items.isEmpty else {
-        throw RegionShotError.windowNotFound("No menu-bar items are currently available for `\(runningApplication.name)`.")
+        throw BrrainzToolsError.windowNotFound("No menu-bar items are currently available for `\(runningApplication.name)`.")
     }
 
     return MenuBarItemCatalog(
@@ -5977,13 +6017,13 @@ func selectMenuBarItem(
             .prefix(6)
             .map(formatMenuBarCandidate)
             .joined(separator: ", ")
-        throw RegionShotError.ambiguousWindow("More than one menu-bar item is available for `\(catalog.application.name)`. Choose `--menu-bar-index` or `--menu-bar-item`: \(suggestions)")
+        throw BrrainzToolsError.ambiguousWindow("More than one menu-bar item is available for `\(catalog.application.name)`. Choose `--menu-bar-index` or `--menu-bar-item`: \(suggestions)")
     }
 
     switch selection {
     case .index(let index):
         guard let item = catalog.items.first(where: { $0.index == index }) else {
-            throw RegionShotError.windowNotFound("No menu-bar item at index \(index) for `\(catalog.application.name)`. Run `regionshot --app \"\(catalog.application.name)\" --list-menu-bar-items` to inspect available items.")
+            throw BrrainzToolsError.windowNotFound("No menu-bar item at index \(index) for `\(catalog.application.name)`. Run `brrainztools --app \"\(catalog.application.name)\" --list-menu-bar-items` to inspect available items.")
         }
         return item
     case .name(let query):
@@ -6011,7 +6051,7 @@ func selectMenuBarItem(
         let matches = exactMatches.isEmpty ? partialMatches : exactMatches
 
         guard !matches.isEmpty else {
-            throw RegionShotError.windowNotFound("No menu-bar item matching `\(query)` was found for `\(catalog.application.name)`. Run `regionshot --app \"\(catalog.application.name)\" --list-menu-bar-items` to inspect available items.")
+            throw BrrainzToolsError.windowNotFound("No menu-bar item matching `\(query)` was found for `\(catalog.application.name)`. Run `brrainztools --app \"\(catalog.application.name)\" --list-menu-bar-items` to inspect available items.")
         }
 
         guard matches.count == 1, let match = matches.first else {
@@ -6019,7 +6059,7 @@ func selectMenuBarItem(
                 .prefix(6)
                 .map(formatMenuBarCandidate)
                 .joined(separator: ", ")
-            throw RegionShotError.ambiguousWindow("More than one menu-bar item matches `\(query)`: \(suggestions)")
+            throw BrrainzToolsError.ambiguousWindow("More than one menu-bar item matches `\(query)`: \(suggestions)")
         }
 
         return match
@@ -6094,7 +6134,7 @@ private func selectMenuChildItem(
             .map(formatAccessibilityCandidate)
             .joined(separator: ", ")
         let suffix = suggestions.isEmpty ? "" : " Candidates: \(suggestions)"
-        throw RegionShotError.accessibilityQueryFailed("No visible child menu item matching `\(selection.query)` was found after opening the selected menu-bar item.\(suffix)")
+        throw BrrainzToolsError.accessibilityQueryFailed("No visible child menu item matching `\(selection.query)` was found after opening the selected menu-bar item.\(suffix)")
     }
 
     guard matches.count == 1, let match = matches.first else {
@@ -6102,7 +6142,7 @@ private func selectMenuChildItem(
             .prefix(8)
             .map(formatAccessibilityCandidate)
             .joined(separator: ", ")
-        throw RegionShotError.accessibilityQueryFailed("More than one child menu item matches `\(selection.query)`: \(suggestions)")
+        throw BrrainzToolsError.accessibilityQueryFailed("More than one child menu item matches `\(selection.query)`: \(suggestions)")
     }
 
     return match
@@ -6124,7 +6164,7 @@ private func buildVisibleWindowCatalog(selector: ApplicationSelector) throws -> 
     )
 
     guard !windows.isEmpty else {
-        throw RegionShotError.windowNotFound(
+        throw BrrainzToolsError.windowNotFound(
             windowlessApplicationMessage(
                 name: runningApplication.name,
                 bundleIdentifier: runningApplication.bundleIdentifier,
@@ -6171,7 +6211,7 @@ private func selectVisibleWindow(
 ) throws -> VisibleCatalogWindow {
     guard let selection else {
         guard let first = catalog.windows.first else {
-            throw RegionShotError.windowNotFound("`\(catalog.application.name)` has no visible windows.")
+            throw BrrainzToolsError.windowNotFound("`\(catalog.application.name)` has no visible windows.")
         }
         return first
     }
@@ -6179,12 +6219,12 @@ private func selectVisibleWindow(
     switch selection {
     case .frontmost:
         guard let first = catalog.windows.first else {
-            throw RegionShotError.windowNotFound("`\(catalog.application.name)` has no visible windows.")
+            throw BrrainzToolsError.windowNotFound("`\(catalog.application.name)` has no visible windows.")
         }
         return first
     case .index(let index):
         guard let window = catalog.windows.first(where: { $0.index == index }) else {
-            throw RegionShotError.windowNotFound("No visible window at index \(index) for `\(catalog.application.name)`. Run `regionshot --app \"\(catalog.application.name)\" --list-visible-windows` to inspect available windows.")
+            throw BrrainzToolsError.windowNotFound("No visible window at index \(index) for `\(catalog.application.name)`. Run `brrainztools --app \"\(catalog.application.name)\" --list-visible-windows` to inspect available windows.")
         }
         return window
     case .name(let query):
@@ -6199,7 +6239,7 @@ private func selectVisibleWindow(
         let matches = exactMatches.isEmpty ? partialMatches : exactMatches
 
         guard !matches.isEmpty else {
-            throw RegionShotError.windowNotFound("No visible window named `\(query)` was found for `\(catalog.application.name)`. Run `regionshot --app \"\(catalog.application.name)\" --list-visible-windows` to inspect available windows.")
+            throw BrrainzToolsError.windowNotFound("No visible window named `\(query)` was found for `\(catalog.application.name)`. Run `brrainztools --app \"\(catalog.application.name)\" --list-visible-windows` to inspect available windows.")
         }
 
         guard matches.count == 1, let match = matches.first else {
@@ -6207,7 +6247,7 @@ private func selectVisibleWindow(
                 .prefix(5)
                 .map { "[\($0.index)] \(displayTitle($0.title))" }
                 .joined(separator: ", ")
-            throw RegionShotError.ambiguousWindow("More than one visible window matches `\(query)`: \(suggestions)")
+            throw BrrainzToolsError.ambiguousWindow("More than one visible window matches `\(query)`: \(suggestions)")
         }
 
         return match
@@ -6301,7 +6341,7 @@ private func buildAccessibilityWindowCatalog(selector: ApplicationSelector) thro
         }
 
     guard !windows.isEmpty else {
-        throw RegionShotError.windowNotFound(
+        throw BrrainzToolsError.windowNotFound(
             windowlessApplicationMessage(
                 name: runningApplication.name,
                 bundleIdentifier: runningApplication.bundleIdentifier,
@@ -6334,12 +6374,12 @@ private func waitForAccessibilityWindow(
             let catalog = try buildAccessibilityWindowCatalog(selector: selector)
             let window = try selectAccessibilityWindow(from: catalog, using: selection)
             return WaitedAccessibilityWindow(catalog: catalog, window: window)
-        } catch RegionShotError.windowNotFound {
+        } catch BrrainzToolsError.windowNotFound {
             Thread.sleep(forTimeInterval: pollInterval)
         }
     } while Date() < deadline
 
-    throw RegionShotError.operationTimedOut("No accessibility window named `\(title)` appeared for `\(selector.label)` within \(formatSeconds(timeout)).")
+    throw BrrainzToolsError.operationTimedOut("No accessibility window named `\(title)` appeared for `\(selector.label)` within \(formatSeconds(timeout)).")
 }
 
 private func waitForAnyAccessibilityWindow(
@@ -6354,14 +6394,14 @@ private func waitForAnyAccessibilityWindow(
             let catalog = try buildAccessibilityWindowCatalog(selector: selector)
             let window = try selectAccessibilityWindow(from: catalog, using: nil)
             return WaitedAccessibilityWindow(catalog: catalog, window: window)
-        } catch RegionShotError.applicationNotFound {
+        } catch BrrainzToolsError.applicationNotFound {
             Thread.sleep(forTimeInterval: pollInterval)
-        } catch RegionShotError.windowNotFound {
+        } catch BrrainzToolsError.windowNotFound {
             Thread.sleep(forTimeInterval: pollInterval)
         }
     } while Date() < deadline
 
-    throw RegionShotError.operationTimedOut("No accessibility window appeared for `\(selector.label)` within \(formatSeconds(timeout)).")
+    throw BrrainzToolsError.operationTimedOut("No accessibility window appeared for `\(selector.label)` within \(formatSeconds(timeout)).")
 }
 
 private func isFrontmostAccessibilityWindow(
@@ -6404,10 +6444,10 @@ private func resolveAutomationApplication(selector: ApplicationSelector) throws 
             return AutomationApplication(name: "pid \(processID)", bundleIdentifier: "", processID: processID)
         }
 
-        throw RegionShotError.applicationNotFound("No running application matches pid \(processID).")
+        throw BrrainzToolsError.applicationNotFound("No running application matches pid \(processID).")
     case .name(let query):
         guard normalizedSelectorText(query) != nil else {
-            throw RegionShotError.invalidArguments("App selectors require a non-empty name, bundle id, or process id.")
+            throw BrrainzToolsError.invalidArguments("App selectors require a non-empty name, bundle id, or process id.")
         }
 
         let matches = rankedRunningApplicationMatches(
@@ -6415,7 +6455,7 @@ private func resolveAutomationApplication(selector: ApplicationSelector) throws 
             applications: runningApplications
         )
         guard !matches.isEmpty else {
-            throw RegionShotError.applicationNotFound("No running application matches `\(query)`.")
+            throw BrrainzToolsError.applicationNotFound("No running application matches `\(query)`.")
         }
 
         if let match = uniqueBestRunningApplication(from: matches) {
@@ -6437,7 +6477,7 @@ private func resolveAutomationApplication(selector: ApplicationSelector) throws 
                     return "\(summary.name) (pid \(summary.processID), \(summary.bundleIdentifier), visible windows \(match.visibleWindowCount))"
                 }
                 .joined(separator: ", ")
-            throw RegionShotError.ambiguousApplication("More than one running application matches `\(query)`: \(suggestions)")
+            throw BrrainzToolsError.ambiguousApplication("More than one running application matches `\(query)`: \(suggestions)")
         }
 
         return automationApplication(from: match)
@@ -6654,7 +6694,7 @@ private func selectAccessibilityWindow(
             return main
         }
         guard let first = catalog.windows.first else {
-            throw RegionShotError.windowNotFound("`\(catalog.application.name)` has no accessibility windows.")
+            throw BrrainzToolsError.windowNotFound("`\(catalog.application.name)` has no accessibility windows.")
         }
         return first
     }
@@ -6668,12 +6708,12 @@ private func selectAccessibilityWindow(
             return main
         }
         guard let first = catalog.windows.first else {
-            throw RegionShotError.windowNotFound("`\(catalog.application.name)` has no accessibility windows.")
+            throw BrrainzToolsError.windowNotFound("`\(catalog.application.name)` has no accessibility windows.")
         }
         return first
     case .index(let index):
         guard let window = catalog.windows.first(where: { $0.index == index }) else {
-            throw RegionShotError.windowNotFound("No accessibility window at index \(index) for `\(catalog.application.name)`.")
+            throw BrrainzToolsError.windowNotFound("No accessibility window at index \(index) for `\(catalog.application.name)`.")
         }
         return window
     case .name(let query):
@@ -6688,7 +6728,7 @@ private func selectAccessibilityWindow(
         let matches = exactMatches.isEmpty ? partialMatches : exactMatches
 
         guard !matches.isEmpty else {
-            throw RegionShotError.windowNotFound("No accessibility window named `\(query)` was found for `\(catalog.application.name)`.")
+            throw BrrainzToolsError.windowNotFound("No accessibility window named `\(query)` was found for `\(catalog.application.name)`.")
         }
 
         guard matches.count == 1, let match = matches.first else {
@@ -6696,7 +6736,7 @@ private func selectAccessibilityWindow(
                 .prefix(5)
                 .map { "[\($0.index)] \(displayTitle($0.title))" }
                 .joined(separator: ", ")
-            throw RegionShotError.ambiguousWindow("More than one accessibility window matches `\(query)`: \(suggestions)")
+            throw BrrainzToolsError.ambiguousWindow("More than one accessibility window matches `\(query)`: \(suggestions)")
         }
 
         return match
@@ -6881,7 +6921,7 @@ private func hitTestElement(at screenPoint: CGPoint) throws -> AXUIElement {
     )
 
     guard error == .success, let element else {
-        throw RegionShotError.accessibilityQueryFailed("No accessibility element was found at screen point \(Int(screenPoint.x)),\(Int(screenPoint.y)).")
+        throw BrrainzToolsError.accessibilityQueryFailed("No accessibility element was found at screen point \(Int(screenPoint.x)),\(Int(screenPoint.y)).")
     }
 
     return element
@@ -6893,13 +6933,13 @@ private func validateHitElement(
     selectedWindowTitle: String?
 ) throws {
     guard let containingWindow = containingAccessibilityWindow(for: element) else {
-        throw RegionShotError.accessibilityQueryFailed("The hit-tested element does not expose a containing accessibility window.")
+        throw BrrainzToolsError.accessibilityQueryFailed("The hit-tested element does not expose a containing accessibility window.")
     }
 
     guard CFEqual(containingWindow, selectedWindow) else {
         let actualWindow = accessibilityElementResponse(for: containingWindow, depthRemaining: 0)
         let actualTitle = displayTitle(actualWindow.title)
-        throw RegionShotError.accessibilityQueryFailed("The requested point resolved to a different visible window (`\(actualTitle)`) instead of the selected window `\(displayTitle(selectedWindowTitle))`. Another window or overlay may be in front.")
+        throw BrrainzToolsError.accessibilityQueryFailed("The requested point resolved to a different visible window (`\(actualTitle)`) instead of the selected window `\(displayTitle(selectedWindowTitle))`. Another window or overlay may be in front.")
     }
 }
 
@@ -6978,7 +7018,7 @@ private func resolvePressableElement(
         iterationCount += 1
     }
 
-    throw RegionShotError.accessibilityQueryFailed(failureContext)
+    throw BrrainzToolsError.accessibilityQueryFailed(failureContext)
 }
 
 private func selectAccessibilityElement(
@@ -7014,7 +7054,7 @@ private func waitForAccessibilityElement(
         if let path = selector.path {
             do {
                 return try accessibilityElementCandidate(atPath: path, in: root, requirePressAction: false)
-            } catch RegionShotError.accessibilityQueryFailed {
+            } catch BrrainzToolsError.accessibilityQueryFailed {
                 Thread.sleep(forTimeInterval: pollInterval)
                 continue
             }
@@ -7041,7 +7081,7 @@ private func waitForAccessibilityElement(
         Thread.sleep(forTimeInterval: pollInterval)
     } while Date() < deadline
 
-    throw RegionShotError.operationTimedOut("No accessibility element matched \(describe(selector: selector)) within \(formatSeconds(timeout)).")
+    throw BrrainzToolsError.operationTimedOut("No accessibility element matched \(describe(selector: selector)) within \(formatSeconds(timeout)).")
 }
 
 private func selectPressableAccessibilityElement(
@@ -7113,7 +7153,7 @@ private func accessibilityElementCandidate(
     let candidate = accessibilityElementCandidate(for: resolved.element, depth: resolved.depth)
 
     if requirePressAction, !candidate.actions.contains(kAXPressAction as String) {
-        throw RegionShotError.accessibilityQueryFailed("Accessibility element at path `\(path)` does not support `AXPress`.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Accessibility element at path `\(path)` does not support `AXPress`.")
     }
 
     return candidate
@@ -7129,14 +7169,14 @@ private func resolveAccessibilityElement(atPath path: String, in root: AXUIEleme
     for (depth, index) in indices.dropFirst().enumerated() {
         let children = copyAXElements(from: currentElement, attribute: kAXChildrenAttribute as CFString)
         guard index < children.count else {
-            throw RegionShotError.accessibilityQueryFailed("No accessibility element exists at path `\(path)`: child index \(index) is outside the \(children.count) children at path `\(currentPath)`.")
+            throw BrrainzToolsError.accessibilityQueryFailed("No accessibility element exists at path `\(path)`: child index \(index) is outside the \(children.count) children at path `\(currentPath)`.")
         }
 
         currentElement = children[index]
         currentPath += ".\(index)"
 
         if depth > 64 {
-            throw RegionShotError.accessibilityQueryFailed("Accessibility path `\(path)` is too deep.")
+            throw BrrainzToolsError.accessibilityQueryFailed("Accessibility path `\(path)` is too deep.")
         }
     }
 
@@ -7163,7 +7203,7 @@ private func selectUniqueAccessibilityCandidate(
     candidateDescription: String
 ) throws -> AccessibilityElementCandidate {
     guard !candidates.isEmpty else {
-        throw RegionShotError.accessibilityQueryFailed("No \(candidateDescription) matched \(describe(selector: selector)).")
+        throw BrrainzToolsError.accessibilityQueryFailed("No \(candidateDescription) matched \(describe(selector: selector)).")
     }
 
     if candidates.count == 1, let candidate = candidates.first {
@@ -7175,7 +7215,7 @@ private func selectUniqueAccessibilityCandidate(
         .map(formatAccessibilityCandidate)
         .joined(separator: ", ")
 
-    throw RegionShotError.accessibilityQueryFailed("More than one \(candidateDescription) matched \(describe(selector: selector)): \(suggestions)")
+    throw BrrainzToolsError.accessibilityQueryFailed("More than one \(candidateDescription) matched \(describe(selector: selector)): \(suggestions)")
 }
 
 private func collectAccessibilityElementCandidates(
@@ -7262,7 +7302,7 @@ private func openMenuBarSurface(
     }
 
     guard supportsAXAction(item.element, action: kAXPressAction as String) else {
-        throw RegionShotError.accessibilityQueryFailed("Menu-bar item \(formatMenuBarCandidate(item)) does not support `AXPress`.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Menu-bar item \(formatMenuBarCandidate(item)) does not support `AXPress`.")
     }
 
     let excludedWindowIDs = Set(
@@ -7281,12 +7321,12 @@ private func openMenuBarSurface(
     }
 
     guard error == .success else {
-        throw RegionShotError.accessibilityQueryFailed(
+        throw BrrainzToolsError.accessibilityQueryFailed(
             "Failed to perform `AXPress` on \(formatMenuBarCandidate(item)) (AX error \(formatAXError(error)))."
         )
     }
 
-    throw RegionShotError.accessibilityQueryFailed("No visible menu or menu-like popover appeared after pressing \(formatMenuBarCandidate(item)).")
+    throw BrrainzToolsError.accessibilityQueryFailed("No visible menu or menu-like popover appeared after pressing \(formatMenuBarCandidate(item)).")
 }
 
 private func activateMenuBarItem(
@@ -7294,7 +7334,7 @@ private func activateMenuBarItem(
     requireVisibleMenu: Bool
 ) throws -> AXUIElement? {
     guard supportsAXAction(item.element, action: kAXPressAction as String) else {
-        throw RegionShotError.accessibilityQueryFailed("Menu-bar item \(formatMenuBarCandidate(item)) does not support `AXPress`.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Menu-bar item \(formatMenuBarCandidate(item)) does not support `AXPress`.")
     }
 
     let error = AXUIElementPerformAction(item.element, kAXPressAction as CFString)
@@ -7302,18 +7342,18 @@ private func activateMenuBarItem(
 
     if requireVisibleMenu, visibleMenu == nil {
         if error == .success {
-            throw RegionShotError.accessibilityQueryFailed(
+            throw BrrainzToolsError.accessibilityQueryFailed(
                 "No visible menu appeared after pressing \(formatMenuBarCandidate(item))."
             )
         }
 
-        throw RegionShotError.accessibilityQueryFailed(
+        throw BrrainzToolsError.accessibilityQueryFailed(
             "Failed to perform `AXPress` on \(formatMenuBarCandidate(item)); no visible menu appeared (AX error \(formatAXError(error)))."
         )
     }
 
     guard error == .success || visibleMenu != nil else {
-        throw RegionShotError.accessibilityQueryFailed(
+        throw BrrainzToolsError.accessibilityQueryFailed(
             "Failed to perform `AXPress` on \(formatMenuBarCandidate(item)) (AX error \(formatAXError(error)))."
         )
     }
@@ -7577,7 +7617,7 @@ private func centerPoint(in windowFrame: CGRect) -> WindowPoint {
 
 private func postMouseClick(_ click: MouseClick, at screenPoint: CGPoint) throws {
     guard let source = CGEventSource(stateID: .privateState) else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to create a mouse event source.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Failed to create a mouse event source.")
     }
 
     let downType: CGEventType = click.button == .right ? .rightMouseDown : .leftMouseDown
@@ -7604,7 +7644,7 @@ private func postMouseClick(_ click: MouseClick, at screenPoint: CGPoint) throws
 
 private func postMouseDrag(from startPoint: CGPoint, to endPoint: CGPoint) throws {
     guard let source = CGEventSource(stateID: .privateState) else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to create a mouse event source.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Failed to create a mouse event source.")
     }
 
     try postMouseEvent(type: .leftMouseDown, at: startPoint, button: .left, clickState: 1, source: source)
@@ -7636,7 +7676,7 @@ private func postMouseEvent(
         mouseCursorPosition: screenPoint,
         mouseButton: button
     ) else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to create mouse event.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Failed to create mouse event.")
     }
 
     event.setIntegerValueField(.mouseEventClickState, value: Int64(clickState))
@@ -7656,7 +7696,7 @@ private func postScroll(_ delta: ScrollDelta, at screenPoint: CGPoint) throws {
             wheel3: 0
         )
     else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to create scroll event.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Failed to create scroll event.")
     }
 
     event.location = screenPoint
@@ -7665,7 +7705,7 @@ private func postScroll(_ delta: ScrollDelta, at screenPoint: CGPoint) throws {
 
 private func postText(_ text: String, to processID: pid_t) throws {
     guard let source = CGEventSource(stateID: .privateState) else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to create a keyboard event source.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Failed to create a keyboard event source.")
     }
 
     for character in text {
@@ -7684,7 +7724,7 @@ private func postUnicodeKeyEvent(
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
         let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
     else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to create Unicode keyboard events.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Failed to create Unicode keyboard events.")
     }
 
     utf16.withUnsafeBufferPointer { buffer in
@@ -7700,7 +7740,7 @@ private func postUnicodeKeyEvent(
 
 private func postKeyChord(_ chord: KeyChord, to processID: pid_t) throws {
     guard let source = CGEventSource(stateID: .privateState) else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to create a keyboard event source.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Failed to create a keyboard event source.")
     }
 
     // Modifier shortcuts are interpreted by the frontmost app; the caller activates the target process before posting.
@@ -7719,7 +7759,7 @@ private func postKeyCode(
     guard
         let event = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: keyDown)
     else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to create keyboard event for virtual key \(keyCode).")
+        throw BrrainzToolsError.accessibilityQueryFailed("Failed to create keyboard event for virtual key \(keyCode).")
     }
 
     event.flags = flags
@@ -7753,8 +7793,8 @@ private func captureMenuBarSurface(
             timeout: timeout,
             imageOutput: imageOutput
         )
-    } catch RegionShotError.captureFailed(let message) {
-        throw RegionShotError.captureFailed("Failed to capture \(surface.kind) for \(formatMenuBarCandidate(item)) at `\(region.rectangleArgument)`: \(message)")
+    } catch BrrainzToolsError.captureFailed(let message) {
+        throw BrrainzToolsError.captureFailed("Failed to capture \(surface.kind) for \(formatMenuBarCandidate(item)) at `\(region.rectangleArgument)`: \(message)")
     }
 }
 
@@ -7810,7 +7850,7 @@ private func captureRegion(
     item: MenuBarCatalogItem
 ) throws -> CaptureRegion {
     guard let frame, !frame.isEmpty else {
-        throw RegionShotError.captureFailed("The opened menu for \(formatMenuBarCandidate(item)) did not expose a visible frame.")
+        throw BrrainzToolsError.captureFailed("The opened menu for \(formatMenuBarCandidate(item)) did not expose a visible frame.")
     }
 
     let minX = Int(floor(frame.minX))
@@ -7998,7 +8038,7 @@ private func performMenuItemAction(
         .filter { supportsAXAction(candidate.element, action: $0) }
 
     guard let primaryAction = actions.first else {
-        throw RegionShotError.accessibilityQueryFailed(
+        throw BrrainzToolsError.accessibilityQueryFailed(
             "Child menu item \(target) does not support `AXPress` or `AXPick`."
         )
     }
@@ -8039,12 +8079,12 @@ private func performMenuItemAction(
             return alternateAction
         }
 
-        throw RegionShotError.accessibilityQueryFailed(
+        throw BrrainzToolsError.accessibilityQueryFailed(
             "Failed to press child menu item \(target): `\(primaryAction)` returned \(formatAXError(primaryOutcome.error)); `\(alternateAction)` returned \(formatAXError(alternateOutcome.error))."
         )
     }
 
-    throw RegionShotError.accessibilityQueryFailed(
+    throw BrrainzToolsError.accessibilityQueryFailed(
         "Failed to press child menu item \(target): `\(primaryAction)` returned \(formatAXError(primaryOutcome.error)); no alternate action was attempted because the original menu item was no longer safely reachable."
     )
 }
@@ -8054,7 +8094,7 @@ private func performSetValue(_ value: String, on element: AXUIElement) throws {
     var isSettable = DarwinBoolean(false)
     let settableError = AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &isSettable)
     if settableError == .success, !isSettable.boolValue {
-        throw RegionShotError.accessibilityQueryFailed("Selected element \(target) does not allow setting `AXValue`.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Selected element \(target) does not allow setting `AXValue`.")
     }
 
     let outcome = performAXMutationOnce(
@@ -8070,7 +8110,7 @@ private func performSetValue(_ value: String, on element: AXUIElement) throws {
         }
     )
     guard outcome.accepted else {
-        throw RegionShotError.accessibilityQueryFailed(
+        throw BrrainzToolsError.accessibilityQueryFailed(
             "Failed to set `AXValue` on \(target) (AX error \(formatAXError(outcome.error)))."
         )
     }
@@ -8080,7 +8120,7 @@ private func performSetWindowPosition(_ position: WindowPosition, on element: AX
     let target = formatAccessibilityCandidate(accessibilityElementCandidate(for: element, depth: 0))
     var point = position.point
     guard let value = AXValueCreate(.cgPoint, &point) else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to create `AXPosition` value \(position.x),\(position.y).")
+        throw BrrainzToolsError.accessibilityQueryFailed("Failed to create `AXPosition` value \(position.x),\(position.y).")
     }
 
     let outcome = performAXMutationOnce(
@@ -8095,7 +8135,7 @@ private func performSetWindowPosition(_ position: WindowPosition, on element: AX
         }
     )
     guard outcome.accepted else {
-        throw RegionShotError.accessibilityQueryFailed(
+        throw BrrainzToolsError.accessibilityQueryFailed(
             "Failed to set `AXPosition` on \(target) (AX error \(formatAXError(outcome.error)))."
         )
     }
@@ -8105,7 +8145,7 @@ private func performSetWindowSize(_ size: WindowSize, on element: AXUIElement) t
     let target = formatAccessibilityCandidate(accessibilityElementCandidate(for: element, depth: 0))
     var cgSize = size.size
     guard let value = AXValueCreate(.cgSize, &cgSize) else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to create `AXSize` value \(size.width),\(size.height).")
+        throw BrrainzToolsError.accessibilityQueryFailed("Failed to create `AXSize` value \(size.width),\(size.height).")
     }
 
     let outcome = performAXMutationOnce(
@@ -8120,7 +8160,7 @@ private func performSetWindowSize(_ size: WindowSize, on element: AXUIElement) t
         }
     )
     guard outcome.accepted else {
-        throw RegionShotError.accessibilityQueryFailed(
+        throw BrrainzToolsError.accessibilityQueryFailed(
             "Failed to set `AXSize` on \(target) (AX error \(formatAXError(outcome.error)))."
         )
     }
@@ -8138,7 +8178,7 @@ private func performPress(
         verifyPostcondition: verifyPostcondition
     )
     guard outcome.accepted else {
-        throw RegionShotError.accessibilityQueryFailed(
+        throw BrrainzToolsError.accessibilityQueryFailed(
             "Failed to perform `AXPress` on \(target) (AX error \(formatAXError(outcome.error)))."
         )
     }
@@ -8162,7 +8202,7 @@ private func performRaise(
 
     let target = formatAccessibilityCandidate(accessibilityElementCandidate(for: element, depth: 0))
     guard supportsAXAction(element, action: kAXRaiseAction as String) else {
-        throw RegionShotError.accessibilityQueryFailed("Selected window \(target) does not support `AXRaise`.")
+        throw BrrainzToolsError.accessibilityQueryFailed("Selected window \(target) does not support `AXRaise`.")
     }
 
     let outcome = performAXMutationOnce(
@@ -8174,7 +8214,7 @@ private func performRaise(
         }
     )
     guard outcome.accepted else {
-        throw RegionShotError.accessibilityQueryFailed(
+        throw BrrainzToolsError.accessibilityQueryFailed(
             "Failed to perform `AXRaise` on \(target) (AX error \(formatAXError(outcome.error)))."
         )
     }
@@ -8511,7 +8551,7 @@ func withTimeout<T: Sendable>(
                 }
 
                 state.complete(
-                    .failure(RegionShotError.operationTimedOut(timeoutMessage())),
+                    .failure(BrrainzToolsError.operationTimedOut(timeoutMessage())),
                     continuation: continuation,
                     cancelOperationTask: false,
                     cancelTimeoutTask: false
@@ -8535,7 +8575,7 @@ private func screenCaptureKitTimeoutMessage(
     timeout: TimeInterval
 ) -> String {
     let commandArgument = shellQuoted(selector.commandArgument)
-    return "ScreenCaptureKit did not \(operation) within \(formatSeconds(timeout)) for `\(selector.label)`. Try `regionshot --app \(commandArgument) --list-visible-windows` or `regionshot --app \(commandArgument) --visible-window --output FILE` for visible-pixel capture. If ScreenCaptureKit is only slow, retry with `--timeout SECONDS`."
+    return "ScreenCaptureKit did not \(operation) within \(formatSeconds(timeout)) for `\(selector.label)`. Try `brrainztools --app \(commandArgument) --list-visible-windows` or `brrainztools --app \(commandArgument) --visible-window --output FILE` for visible-pixel capture. If ScreenCaptureKit is only slow, retry with `--timeout SECONDS`."
 }
 
 private func formatSeconds(_ seconds: TimeInterval) -> String {
@@ -8601,7 +8641,7 @@ private func buildWindowCatalog(selector: ApplicationSelector, in shareableConte
     }
 
     guard !eligibleWindows.isEmpty else {
-        throw RegionShotError.windowNotFound(
+        throw BrrainzToolsError.windowNotFound(
             windowlessApplicationMessage(
                 name: application.applicationName,
                 bundleIdentifier: application.bundleIdentifier,
@@ -8705,7 +8745,7 @@ private func currentWindowSnapshots() -> [WindowSnapshot] {
 private func resolveShareableApplication(selector: ApplicationSelector, in applications: [SCRunningApplication]) throws -> SCRunningApplication {
     let resolvedApplication = try resolveAutomationApplication(selector: selector)
     guard let application = applications.first(where: { $0.processID == resolvedApplication.processID }) else {
-        throw RegionShotError.applicationNotFound(
+        throw BrrainzToolsError.applicationNotFound(
             "`\(resolvedApplication.name)` (pid \(resolvedApplication.processID)) is running but ScreenCaptureKit did not report it as shareable."
         )
     }
@@ -8717,12 +8757,12 @@ private func selectWindow(from catalog: AppWindowCatalog, using selection: Windo
     switch selection {
     case .frontmost:
         guard let window = catalog.windows.first else {
-            throw RegionShotError.windowNotFound("`\(catalog.application.applicationName)` has no capturable windows.")
+            throw BrrainzToolsError.windowNotFound("`\(catalog.application.applicationName)` has no capturable windows.")
         }
         return window
     case .index(let index):
         guard let window = catalog.windows.first(where: { $0.index == index }) else {
-            throw RegionShotError.windowNotFound("No window at index \(index) for `\(catalog.application.applicationName)`. Run `regionshot --app \"\(catalog.application.applicationName)\" --list-windows` to inspect available windows.")
+            throw BrrainzToolsError.windowNotFound("No window at index \(index) for `\(catalog.application.applicationName)`. Run `brrainztools --app \"\(catalog.application.applicationName)\" --list-windows` to inspect available windows.")
         }
         return window
     case .name(let query):
@@ -8737,7 +8777,7 @@ private func selectWindow(from catalog: AppWindowCatalog, using selection: Windo
         let matches = exactMatches.isEmpty ? partialMatches : exactMatches
 
         guard !matches.isEmpty else {
-            throw RegionShotError.windowNotFound("No window named `\(query)` was found for `\(catalog.application.applicationName)`. Run `regionshot --app \"\(catalog.application.applicationName)\" --list-windows` to inspect available windows.")
+            throw BrrainzToolsError.windowNotFound("No window named `\(query)` was found for `\(catalog.application.applicationName)`. Run `brrainztools --app \"\(catalog.application.applicationName)\" --list-windows` to inspect available windows.")
         }
 
         guard matches.count == 1, let match = matches.first else {
@@ -8745,7 +8785,7 @@ private func selectWindow(from catalog: AppWindowCatalog, using selection: Windo
                 .prefix(5)
                 .map { "[\($0.index)] \(displayTitle($0.title))" }
                 .joined(separator: ", ")
-            throw RegionShotError.ambiguousWindow("More than one window matches `\(query)`: \(suggestions)")
+            throw BrrainzToolsError.ambiguousWindow("More than one window matches `\(query)`: \(suggestions)")
         }
 
         return match
@@ -8810,7 +8850,7 @@ private func captureDisplayRegion(
     let plans = planDisplayRegionCaptures(displays: shareableContent.displays, regionRect: regionRect)
 
     guard !plans.isEmpty else {
-        throw RegionShotError.captureFailed("No display intersects the requested rectangle \(region.rectangleArgument).")
+        throw BrrainzToolsError.captureFailed("No display intersects the requested rectangle \(region.rectangleArgument).")
     }
 
     let canvasScale = max(1, plans.map(\.pointPixelScale).max() ?? 1)
@@ -8860,7 +8900,7 @@ private func captureDisplayRegion(
     }
 
     guard let image = context.makeImage() else {
-        throw RegionShotError.captureFailed("ScreenCaptureKit returned no image data for the display capture.")
+        throw BrrainzToolsError.captureFailed("ScreenCaptureKit returned no image data for the display capture.")
     }
 
     try writeImage(image, to: outputURL, options: imageOutput)
@@ -8884,7 +8924,7 @@ private func captureApplicationRegion(
     )
 
     guard !plans.isEmpty else {
-        throw RegionShotError.captureFailed("No visible content from `\(application.applicationName)` intersects the requested rectangle.")
+        throw BrrainzToolsError.captureFailed("No visible content from `\(application.applicationName)` intersects the requested rectangle.")
     }
 
     let canvasScale = max(1, plans.map(\.pointPixelScale).max() ?? 1)
@@ -8938,7 +8978,7 @@ private func captureApplicationRegion(
     }
 
     guard let image = context.makeImage() else {
-        throw RegionShotError.captureFailed("ScreenCaptureKit returned no image data for the filtered capture.")
+        throw BrrainzToolsError.captureFailed("ScreenCaptureKit returned no image data for the filtered capture.")
     }
 
     try writeImage(image, to: outputURL, options: imageOutput)
@@ -8959,7 +8999,7 @@ func makeCaptureCanvas(size: CGSize) throws -> CGContext {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         )
     else {
-        throw RegionShotError.captureFailed("Failed to allocate an image buffer for the capture.")
+        throw BrrainzToolsError.captureFailed("Failed to allocate an image buffer for the capture.")
     }
 
     return context
@@ -9026,7 +9066,7 @@ private func ensureScreenCaptureAccess() throws {
         return
     }
 
-    throw RegionShotError.capturePermissionDenied
+    throw BrrainzToolsError.capturePermissionDenied
 }
 
 private func ensureAccessibilityAccess(prompt: Bool) throws {
@@ -9039,7 +9079,7 @@ private func ensureAccessibilityAccess(prompt: Bool) throws {
     }
 
     guard isTrusted else {
-        throw RegionShotError.accessibilityPermissionDenied
+        throw BrrainzToolsError.accessibilityPermissionDenied
     }
 }
 
@@ -9050,7 +9090,7 @@ private func validate(windowCrop: WindowCropRect, within contentRect: CGRect, wi
     guard cropRect.maxX <= windowRect.maxX, cropRect.maxY <= windowRect.maxY else {
         let windowWidth = Int(windowRect.width.rounded(.down))
         let windowHeight = Int(windowRect.height.rounded(.down))
-        throw RegionShotError.invalidArguments("`--window-crop` \(windowCrop.x),\(windowCrop.y),\(windowCrop.width),\(windowCrop.height) falls outside the selected window \(windowTitle) sized \(windowWidth)x\(windowHeight) points.")
+        throw BrrainzToolsError.invalidArguments("`--window-crop` \(windowCrop.x),\(windowCrop.y),\(windowCrop.width),\(windowCrop.height) falls outside the selected window \(windowTitle) sized \(windowWidth)x\(windowHeight) points.")
     }
 }
 
@@ -9058,7 +9098,7 @@ private func validate(windowPoint: WindowPoint, within windowFrame: CGRect, wind
     guard CGFloat(windowPoint.x) < windowFrame.width, CGFloat(windowPoint.y) < windowFrame.height else {
         let windowWidth = Int(windowFrame.width.rounded(.down))
         let windowHeight = Int(windowFrame.height.rounded(.down))
-        throw RegionShotError.invalidArguments("`\(flag)` \(windowPoint.x),\(windowPoint.y) falls outside the selected window \(windowTitle) sized \(windowWidth)x\(windowHeight) points.")
+        throw BrrainzToolsError.invalidArguments("`\(flag)` \(windowPoint.x),\(windowPoint.y) falls outside the selected window \(windowTitle) sized \(windowWidth)x\(windowHeight) points.")
     }
 }
 
@@ -9072,12 +9112,12 @@ private func cropWindowImage(_ image: CGImage, using crop: WindowCropRect, point
     let croppedHeight = maxY - minY
 
     guard croppedWidth > 0, croppedHeight > 0 else {
-        throw RegionShotError.captureFailed("`--window-crop` resolved to an empty image.")
+        throw BrrainzToolsError.captureFailed("`--window-crop` resolved to an empty image.")
     }
 
     let cropRect = CGRect(x: minX, y: minY, width: croppedWidth, height: croppedHeight)
     guard let croppedImage = image.cropping(to: cropRect) else {
-        throw RegionShotError.captureFailed("Failed to crop the selected window image.")
+        throw BrrainzToolsError.captureFailed("Failed to crop the selected window image.")
     }
 
     return croppedImage
@@ -9086,7 +9126,7 @@ private func cropWindowImage(_ image: CGImage, using crop: WindowCropRect, point
 private func writeImage(_ image: CGImage, to outputURL: URL, options: ImageOutputOptions) throws {
     let imageForEncoding = try preparedImageForEncoding(image, options: options)
     guard let destination = CGImageDestinationCreateWithURL(outputURL as CFURL, options.format.typeIdentifier as CFString, 1, nil) else {
-        throw RegionShotError.encodeFailed("Failed to create a \(options.format.displayName) destination for \(outputURL.path).")
+        throw BrrainzToolsError.encodeFailed("Failed to create a \(options.format.displayName) destination for \(outputURL.path).")
     }
 
     let properties: CFDictionary?
@@ -9102,7 +9142,7 @@ private func writeImage(_ image: CGImage, to outputURL: URL, options: ImageOutpu
     CGImageDestinationAddImage(destination, imageForEncoding, properties)
 
     guard CGImageDestinationFinalize(destination) else {
-        throw RegionShotError.encodeFailed("Failed to write \(options.format.displayName) data to \(outputURL.path).")
+        throw BrrainzToolsError.encodeFailed("Failed to write \(options.format.displayName) data to \(outputURL.path).")
     }
 }
 
@@ -9163,7 +9203,7 @@ private func renderImageForEncoding(
         space: colorSpace,
         bitmapInfo: bitmapInfo
     ) else {
-        throw RegionShotError.encodeFailed("Failed to create an image resize context.")
+        throw BrrainzToolsError.encodeFailed("Failed to create an image resize context.")
     }
 
     let targetRect = CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight)
@@ -9175,7 +9215,7 @@ private func renderImageForEncoding(
     context.draw(image, in: targetRect)
 
     guard let renderedImage = context.makeImage() else {
-        throw RegionShotError.encodeFailed("Failed to render the resized image.")
+        throw BrrainzToolsError.encodeFailed("Failed to render the resized image.")
     }
 
     return renderedImage

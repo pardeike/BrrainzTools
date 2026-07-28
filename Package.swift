@@ -4,23 +4,23 @@
 import PackageDescription
 
 let package = Package(
-    name: "RegionShot",
+    name: "BrrainzTools",
     platforms: [
         .macOS("27.0"),
     ],
     products: [
         .executable(
-            name: "regionshot",
-            targets: ["RegionShot"]
+            name: "brrainztools",
+            targets: ["BrrainzTools"]
         ),
     ],
     targets: [
         .executableTarget(
-            name: "RegionShot"
+            name: "BrrainzTools"
         ),
         .testTarget(
-            name: "RegionShotTests",
-            dependencies: ["RegionShot"]
+            name: "BrrainzToolsTests",
+            dependencies: ["BrrainzTools"]
         ),
     ],
     swiftLanguageModes: [.v6]
