@@ -18,7 +18,7 @@ thing instead of guessing screen rectangles:
 
 ## Install
 
-Download `RegionShot-v1.1-macos.dmg` from the GitHub release, open it, and run
+Download `RegionShot-v1.1.2-macos.dmg` from the GitHub release, open it, and run
 `Install RegionShot.command`.
 
 The installer copies `regionshot` to `~/Scripts/regionshot`.

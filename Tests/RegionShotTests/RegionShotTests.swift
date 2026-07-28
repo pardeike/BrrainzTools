@@ -1906,6 +1906,214 @@ final class RegionShotTests: XCTestCase {
         )
     }
 
+    func testAXMutationInvokesActionOnceAndAcceptsObservedPostcondition() {
+        let attributeUnsupported = AXError(rawValue: -25205)!
+        var mutationCount = 0
+        var postconditionCheckCount = 0
+        var sleepCount = 0
+
+        let outcome = performAXMutationOnce(
+            perform: {
+                mutationCount += 1
+                return attributeUnsupported
+            },
+            verifyPostcondition: {
+                postconditionCheckCount += 1
+                return postconditionCheckCount == 3
+            },
+            postconditionChecks: 4,
+            pollInterval: 0.05,
+            sleep: { _ in sleepCount += 1 }
+        )
+
+        XCTAssertTrue(outcome.accepted)
+        XCTAssertEqual(outcome.error.rawValue, -25205)
+        XCTAssertTrue(outcome.postconditionSatisfied)
+        XCTAssertEqual(mutationCount, 1)
+        XCTAssertEqual(postconditionCheckCount, 3)
+        XCTAssertEqual(sleepCount, 2)
+    }
+
+    func testAXMutationSuccessDoesNotPollOrRepeatAction() {
+        var mutationCount = 0
+        var postconditionCheckCount = 0
+        var sleepCount = 0
+
+        let outcome = performAXMutationOnce(
+            perform: {
+                mutationCount += 1
+                return .success
+            },
+            verifyPostcondition: {
+                postconditionCheckCount += 1
+                return false
+            },
+            sleep: { _ in sleepCount += 1 }
+        )
+
+        XCTAssertTrue(outcome.accepted)
+        XCTAssertFalse(outcome.postconditionSatisfied)
+        XCTAssertEqual(mutationCount, 1)
+        XCTAssertEqual(postconditionCheckCount, 0)
+        XCTAssertEqual(sleepCount, 0)
+    }
+
+    func testAXMutationRejectsUnverifiedFailureWithoutRepeatingAction() {
+        let cannotComplete = AXError(rawValue: -25204)!
+        var mutationCount = 0
+        var postconditionCheckCount = 0
+        var sleepCount = 0
+
+        let outcome = performAXMutationOnce(
+            perform: {
+                mutationCount += 1
+                return cannotComplete
+            },
+            verifyPostcondition: {
+                postconditionCheckCount += 1
+                return false
+            },
+            postconditionChecks: 3,
+            sleep: { _ in sleepCount += 1 }
+        )
+
+        XCTAssertFalse(outcome.accepted)
+        XCTAssertEqual(mutationCount, 1)
+        XCTAssertEqual(postconditionCheckCount, 3)
+        XCTAssertEqual(sleepCount, 2)
+    }
+
+    func testAXErrorFormattingIncludesSymbolicAndRawValues() {
+        let attributeUnsupported = AXError(rawValue: -25205)!
+        let cannotComplete = AXError(rawValue: -25204)!
+
+        XCTAssertEqual(
+            formatAXError(attributeUnsupported),
+            "kAXErrorAttributeUnsupported (-25205)"
+        )
+        XCTAssertEqual(
+            formatAXError(cannotComplete),
+            "kAXErrorCannotComplete (-25204)"
+        )
+    }
+
+    func testAlternateMenuActionRequiresOriginalReachableContext() {
+        XCTAssertTrue(
+            shouldAttemptAlternateMenuAction(
+                primaryAccepted: false,
+                menuStillVisible: true,
+                itemStillReachable: true,
+                supportsAlternateAction: true
+            )
+        )
+        XCTAssertFalse(
+            shouldAttemptAlternateMenuAction(
+                primaryAccepted: true,
+                menuStillVisible: true,
+                itemStillReachable: true,
+                supportsAlternateAction: true
+            )
+        )
+        XCTAssertFalse(
+            shouldAttemptAlternateMenuAction(
+                primaryAccepted: false,
+                menuStillVisible: false,
+                itemStillReachable: true,
+                supportsAlternateAction: true
+            )
+        )
+        XCTAssertFalse(
+            shouldAttemptAlternateMenuAction(
+                primaryAccepted: false,
+                menuStillVisible: true,
+                itemStillReachable: false,
+                supportsAlternateAction: true
+            )
+        )
+        XCTAssertFalse(
+            shouldAttemptAlternateMenuAction(
+                primaryAccepted: false,
+                menuStillVisible: true,
+                itemStillReachable: true,
+                supportsAlternateAction: false
+            )
+        )
+    }
+
+    func testAccessibilityResponseFallsBackAfterTargetInvalidation() throws {
+        let snapshot = AccessibilityElementResponse(
+            path: nil,
+            role: "AXButton",
+            subrole: "AXCloseButton",
+            title: "Close",
+            description: nil,
+            identifier: nil,
+            value: nil,
+            enabled: true,
+            focused: nil,
+            selected: nil,
+            frame: JSONRect(CGRect(x: 10, y: 20, width: 14, height: 14)),
+            actions: ["AXPress"],
+            childCount: 0,
+            truncated: nil,
+            children: nil
+        )
+        let invalidated = AccessibilityElementResponse(
+            path: nil,
+            role: nil,
+            subrole: nil,
+            title: nil,
+            description: nil,
+            identifier: nil,
+            value: nil,
+            enabled: nil,
+            focused: nil,
+            selected: nil,
+            frame: nil,
+            actions: nil,
+            childCount: 0,
+            truncated: nil,
+            children: []
+        )
+
+        let selected = preferredAccessibilityElementResponse(
+            refreshed: invalidated,
+            fallback: snapshot
+        )
+
+        XCTAssertEqual(
+            try encodeJSON(selected),
+            #"{"actions":["AXPress"],"childCount":0,"enabled":true,"frame":{"height":14,"width":14,"x":10,"y":20},"role":"AXButton","subrole":"AXCloseButton","title":"Close"}"#
+        )
+    }
+
+    func testAXGeometryPostconditionsUseOnePointTolerance() {
+        XCTAssertTrue(
+            axPointMatches(
+                CGPoint(x: 100.75, y: -20.5),
+                expected: CGPoint(x: 100, y: -20)
+            )
+        )
+        XCTAssertFalse(
+            axPointMatches(
+                CGPoint(x: 101.01, y: -20),
+                expected: CGPoint(x: 100, y: -20)
+            )
+        )
+        XCTAssertTrue(
+            axSizeMatches(
+                CGSize(width: 799.25, height: 600.5),
+                expected: CGSize(width: 800, height: 600)
+            )
+        )
+        XCTAssertFalse(
+            axSizeMatches(
+                CGSize(width: 798.9, height: 600),
+                expected: CGSize(width: 800, height: 600)
+            )
+        )
+    }
+
     func testReportedAXActionsOmitsShowMenuOnlyNoise() throws {
         XCTAssertEqual(reportedAXActions([kAXShowMenuAction as String]), [])
         XCTAssertEqual(reportedAXActions([kAXPressAction as String]), [kAXPressAction as String])
@@ -2118,7 +2326,7 @@ final class RegionShotTests: XCTestCase {
             }
         )
 
-        XCTAssertEqual(fallbackVersion, "v1.1")
+        XCTAssertEqual(fallbackVersion, "v1.1.2")
         XCTAssertFalse(gitDescribeWasCalled)
     }
 

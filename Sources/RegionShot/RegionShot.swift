@@ -1131,6 +1131,96 @@ private struct AccessibilityElementCandidate {
     let actions: [String]
 }
 
+struct AXMutationOutcome {
+    let error: AXError
+    let postconditionSatisfied: Bool
+
+    var accepted: Bool {
+        error == .success || postconditionSatisfied
+    }
+}
+
+func performAXMutationOnce(
+    perform: () -> AXError,
+    verifyPostcondition: (() -> Bool)? = nil,
+    postconditionChecks: Int = 16,
+    pollInterval: TimeInterval = 0.05,
+    sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
+) -> AXMutationOutcome {
+    let error = perform()
+    guard error != .success, let verifyPostcondition else {
+        return AXMutationOutcome(error: error, postconditionSatisfied: false)
+    }
+
+    let checkCount = max(1, postconditionChecks)
+    for checkIndex in 0..<checkCount {
+        if verifyPostcondition() {
+            return AXMutationOutcome(error: error, postconditionSatisfied: true)
+        }
+
+        if checkIndex < checkCount - 1 {
+            sleep(pollInterval)
+        }
+    }
+
+    return AXMutationOutcome(error: error, postconditionSatisfied: false)
+}
+
+func axErrorName(_ error: AXError) -> String {
+    switch error.rawValue {
+    case 0:
+        return "kAXErrorSuccess"
+    case -25200:
+        return "kAXErrorFailure"
+    case -25201:
+        return "kAXErrorIllegalArgument"
+    case -25202:
+        return "kAXErrorInvalidUIElement"
+    case -25203:
+        return "kAXErrorInvalidUIElementObserver"
+    case -25204:
+        return "kAXErrorCannotComplete"
+    case -25205:
+        return "kAXErrorAttributeUnsupported"
+    case -25206:
+        return "kAXErrorActionUnsupported"
+    case -25207:
+        return "kAXErrorNotificationUnsupported"
+    case -25208:
+        return "kAXErrorNotImplemented"
+    case -25209:
+        return "kAXErrorNotificationAlreadyRegistered"
+    case -25210:
+        return "kAXErrorNotificationNotRegistered"
+    case -25211:
+        return "kAXErrorAPIDisabled"
+    case -25212:
+        return "kAXErrorNoValue"
+    case -25213:
+        return "kAXErrorParameterizedAttributeUnsupported"
+    case -25214:
+        return "kAXErrorNotEnoughPrecision"
+    default:
+        return "AXError"
+    }
+}
+
+func formatAXError(_ error: AXError) -> String {
+    "\(axErrorName(error)) (\(error.rawValue))"
+}
+
+func shouldAttemptAlternateMenuAction(
+    primaryAccepted: Bool,
+    menuStillVisible: Bool,
+    itemStillReachable: Bool,
+    supportsAlternateAction: Bool
+) -> Bool {
+    !primaryAccepted &&
+    menuStillVisible &&
+    itemStillReachable &&
+    supportsAlternateAction
+}
+
 private struct RunningApplicationMatch {
     let application: NSRunningApplication
     let score: Int
@@ -1443,7 +1533,7 @@ private let managedAgentInstructionsStartMarker = "<!-- regionshot-managed:start
 private let managedAgentInstructionsEndMarker = "<!-- regionshot-managed:end -->"
 private let agentSupportDebugEnvironmentKey = "REGIONSHOT_DEBUG_AGENT_SYNC"
 private let legacyAgentSupportDebugEnvironmentKey = "REGIONSHOT_DEBUG_CODEX_SYNC"
-private let regionShotFallbackVersion = "v1.1"
+private let regionShotFallbackVersion = "v1.1.2"
 private let regionShotVersionEnvironmentKey = "REGIONSHOT_VERSION"
 private let regionShotSupportDirectoryName = ".regionshot-support"
 private let regionShotSupportVersionFilename = "VERSION"
@@ -4346,6 +4436,14 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
         return try encodeJSON(response)
     case .setValue(let selector, let value):
         let selectedElement = try selectAccessibilityElement(in: accessibilityWindow, using: selector)
+        let matchedSnapshot = accessibilityElementResponse(
+            for: selectedElement.element,
+            depthRemaining: 1
+        )
+        let ancestorSnapshots = accessibilityAncestorResponses(
+            for: selectedElement.element,
+            stoppingAt: accessibilityWindow
+        )
         try performSetValue(value, on: selectedElement.element)
         let response = AccessibilitySetValueResponse(
             application: windowListApplication(for: catalog.application),
@@ -4354,8 +4452,11 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
             attribute: kAXValueAttribute as String,
             value: value,
             selector: accessibilitySelectorResponse(for: selector),
-            matched: accessibilityElementResponse(for: selectedElement.element, depthRemaining: 1),
-            ancestors: accessibilityAncestorResponses(for: selectedElement.element, stoppingAt: accessibilityWindow)
+            matched: refreshedAccessibilityElementResponse(
+                for: selectedElement.element,
+                fallback: matchedSnapshot
+            ),
+            ancestors: ancestorSnapshots
         )
         return try encodeJSON(response)
     case .click(let click):
@@ -4447,8 +4548,29 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
             within: accessibilityWindow,
             failureContext: "No pressable accessibility element was found at window point \(point.x),\(point.y)."
         )
+        let matchedSnapshot = accessibilityElementResponse(
+            for: refinedHitElement,
+            depthRemaining: 1
+        )
+        let pressedSnapshot = accessibilityElementResponse(
+            for: pressableElement,
+            depthRemaining: 1
+        )
+        let ancestorSnapshots = accessibilityAncestorResponses(
+            for: pressableElement,
+            stoppingAt: accessibilityWindow
+        )
+        let modalProbe = transientModalDisappearanceProbe(
+            for: pressableElement,
+            stoppingAt: accessibilityWindow
+        )
 
-        try performPress(on: pressableElement)
+        try performPress(
+            on: pressableElement,
+            verifyPostcondition: modalProbe.map { probe in
+                { probe.isAbsent() }
+            }
+        )
 
         let response = AccessibilityPressResponse(
             application: windowListApplication(for: catalog.application),
@@ -4458,14 +4580,38 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
             selector: nil,
             point: JSONPoint(point.point),
             screenPoint: JSONPoint(screenPoint),
-            matched: accessibilityElementResponse(for: refinedHitElement, depthRemaining: 1),
-            pressed: accessibilityElementResponse(for: pressableElement, depthRemaining: 1),
-            ancestors: accessibilityAncestorResponses(for: pressableElement, stoppingAt: accessibilityWindow)
+            matched: refreshedAccessibilityElementResponse(
+                for: refinedHitElement,
+                fallback: matchedSnapshot
+            ),
+            pressed: refreshedAccessibilityElementResponse(
+                for: pressableElement,
+                fallback: pressedSnapshot
+            ),
+            ancestors: ancestorSnapshots
         )
         return try encodeJSON(response)
     case .pressElement(let selector):
         let pressableElement = try selectPressableAccessibilityElement(in: accessibilityWindow, using: selector)
-        try performPress(on: pressableElement.element)
+        let matchedSnapshot = accessibilityElementResponse(
+            for: pressableElement.element,
+            depthRemaining: 1
+        )
+        let ancestorSnapshots = accessibilityAncestorResponses(
+            for: pressableElement.element,
+            stoppingAt: accessibilityWindow
+        )
+        let modalProbe = transientModalDisappearanceProbe(
+            for: pressableElement.element,
+            stoppingAt: accessibilityWindow
+        )
+
+        try performPress(
+            on: pressableElement.element,
+            verifyPostcondition: modalProbe.map { probe in
+                { probe.isAbsent() }
+            }
+        )
 
         let response = AccessibilityPressResponse(
             application: windowListApplication(for: catalog.application),
@@ -4475,14 +4621,23 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
             selector: accessibilitySelectorResponse(for: selector),
             point: nil,
             screenPoint: nil,
-            matched: accessibilityElementResponse(for: pressableElement.element, depthRemaining: 1),
-            pressed: accessibilityElementResponse(for: pressableElement.element, depthRemaining: 1),
-            ancestors: accessibilityAncestorResponses(for: pressableElement.element, stoppingAt: accessibilityWindow)
+            matched: refreshedAccessibilityElementResponse(
+                for: pressableElement.element,
+                fallback: matchedSnapshot
+            ),
+            pressed: refreshedAccessibilityElementResponse(
+                for: pressableElement.element,
+                fallback: matchedSnapshot
+            ),
+            ancestors: ancestorSnapshots
         )
         return try encodeJSON(response)
     case .raiseWindow:
         let activationRequestAccepted = activateApplication(catalog.application)
-        try performRaise(on: accessibilityWindow)
+        _ = try performRaise(
+            on: accessibilityWindow,
+            application: catalog.application
+        )
         try await Task.sleep(nanoseconds: 150_000_000)
 
         let refreshedCatalog = try buildAccessibilityWindowCatalog(selector: command.applicationSelector)
@@ -4500,12 +4655,37 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
             throw RegionShotError.accessibilityQueryFailed("Selected window \(formatAXElement(accessibilityWindow)) does not expose an `AXCloseButton`.")
         }
 
-        try performPress(on: closeButton)
+        let targetSnapshot = accessibilityElementResponse(
+            for: closeButton,
+            depthRemaining: 1
+        )
+        let disappearanceProbe = windowDisappearanceProbe(
+            application: catalog.application,
+            window: accessibilityWindow
+        )
+        try performPress(
+            on: closeButton,
+            verifyPostcondition: {
+                if disappearanceProbe?.isAbsent() == true {
+                    return true
+                }
+
+                guard let runningApplication = NSRunningApplication(
+                    processIdentifier: catalog.application.processID
+                ) else {
+                    return true
+                }
+                return runningApplication.isTerminated
+            }
+        )
         let response = AccessibilityCloseWindowResponse(
             application: windowListApplication(for: catalog.application),
             window: accessibilityWindowEntry(for: selectedWindow),
             action: kAXPressAction as String,
-            target: accessibilityElementResponse(for: closeButton, depthRemaining: 1)
+            target: refreshedAccessibilityElementResponse(
+                for: closeButton,
+                fallback: targetSnapshot
+            )
         )
         return try encodeJSON(response)
     case .minimizeWindow:
@@ -4513,12 +4693,27 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
             throw RegionShotError.accessibilityQueryFailed("Selected window \(formatAXElement(accessibilityWindow)) does not expose an `AXMinimizeButton`.")
         }
 
-        try performPress(on: minimizeButton)
+        let targetSnapshot = accessibilityElementResponse(
+            for: minimizeButton,
+            depthRemaining: 1
+        )
+        try performPress(
+            on: minimizeButton,
+            verifyPostcondition: {
+                copyAXBool(
+                    from: accessibilityWindow,
+                    attribute: kAXMinimizedAttribute as CFString
+                ) == true
+            }
+        )
         let response = AccessibilityMinimizeWindowResponse(
             application: windowListApplication(for: catalog.application),
             window: accessibilityWindowEntry(for: selectedWindow),
             action: kAXPressAction as String,
-            target: accessibilityElementResponse(for: minimizeButton, depthRemaining: 1)
+            target: refreshedAccessibilityElementResponse(
+                for: minimizeButton,
+                fallback: targetSnapshot
+            )
         )
         return try encodeJSON(response)
     case .moveWindow(let position):
@@ -4576,7 +4771,7 @@ private func handleMenuBar(using command: MenuBarCommand) async throws -> String
             let menuItem = try selectMenuChildItem(in: menu, matching: childSelection)
             let menuItemResponse = accessibilityElementResponse(for: menuItem.element, depthRemaining: 1)
             let ancestors = accessibilityAncestorResponses(for: menuItem.element, stoppingAt: menu)
-            let action = try performMenuItemAction(on: menuItem)
+            let action = try performMenuItemAction(on: menuItem, in: menu)
 
             let response = MenuBarChildPressResponse(
                 application: windowListApplication(for: catalog.application),
@@ -6549,6 +6744,24 @@ private func accessibilityElementResponse(
     )
 }
 
+func preferredAccessibilityElementResponse(
+    refreshed: AccessibilityElementResponse,
+    fallback: AccessibilityElementResponse
+) -> AccessibilityElementResponse {
+    refreshed.role == nil ? fallback : refreshed
+}
+
+private func refreshedAccessibilityElementResponse(
+    for element: AXUIElement,
+    fallback: AccessibilityElementResponse,
+    depthRemaining: Int = 1
+) -> AccessibilityElementResponse {
+    preferredAccessibilityElementResponse(
+        refreshed: accessibilityElementResponse(for: element, depthRemaining: depthRemaining),
+        fallback: fallback
+    )
+}
+
 func reportedAXActions(_ actions: [String]) -> [String] {
     if actions == [kAXShowMenuAction as String] {
         return []
@@ -7068,7 +7281,9 @@ private func openMenuBarSurface(
     }
 
     guard error == .success else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to perform `AXPress` on \(formatMenuBarCandidate(item)) (AX error \(error.rawValue)).")
+        throw RegionShotError.accessibilityQueryFailed(
+            "Failed to perform `AXPress` on \(formatMenuBarCandidate(item)) (AX error \(formatAXError(error)))."
+        )
     }
 
     throw RegionShotError.accessibilityQueryFailed("No visible menu or menu-like popover appeared after pressing \(formatMenuBarCandidate(item)).")
@@ -7082,21 +7297,25 @@ private func activateMenuBarItem(
         throw RegionShotError.accessibilityQueryFailed("Menu-bar item \(formatMenuBarCandidate(item)) does not support `AXPress`.")
     }
 
-    var error = AXUIElementPerformAction(item.element, kAXPressAction as CFString)
-    var visibleMenu = waitForVisibleMenu(for: item.element)
+    let error = AXUIElementPerformAction(item.element, kAXPressAction as CFString)
+    let visibleMenu = waitForVisibleMenu(for: item.element)
 
     if requireVisibleMenu, visibleMenu == nil {
-        Thread.sleep(forTimeInterval: 0.1)
-        error = AXUIElementPerformAction(item.element, kAXPressAction as CFString)
-        visibleMenu = waitForVisibleMenu(for: item.element)
-    }
+        if error == .success {
+            throw RegionShotError.accessibilityQueryFailed(
+                "No visible menu appeared after pressing \(formatMenuBarCandidate(item))."
+            )
+        }
 
-    if requireVisibleMenu, visibleMenu == nil {
-        throw RegionShotError.accessibilityQueryFailed("No visible menu appeared after pressing \(formatMenuBarCandidate(item)).")
+        throw RegionShotError.accessibilityQueryFailed(
+            "Failed to perform `AXPress` on \(formatMenuBarCandidate(item)); no visible menu appeared (AX error \(formatAXError(error)))."
+        )
     }
 
     guard error == .success || visibleMenu != nil else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to perform `AXPress` on \(formatMenuBarCandidate(item)) (AX error \(error.rawValue)).")
+        throw RegionShotError.accessibilityQueryFailed(
+            "Failed to perform `AXPress` on \(formatMenuBarCandidate(item)) (AX error \(formatAXError(error)))."
+        )
     }
 
     return visibleMenu
@@ -7304,10 +7523,7 @@ private func windowClosesAfterPressingMenuBarItem(
     _ item: MenuBarCatalogItem,
     windowID: CGWindowID
 ) -> Bool {
-    guard AXUIElementPerformAction(item.element, kAXPressAction as CFString) == .success else {
-        return false
-    }
-
+    _ = AXUIElementPerformAction(item.element, kAXPressAction as CFString)
     return waitForWindowToClose(windowID)
 }
 
@@ -7335,8 +7551,10 @@ private func prepareForMouseInput(
     var windowRaiseAttempted = false
 
     if supportsAXAction(window, action: kAXRaiseAction as String) {
-        windowRaiseAttempted = true
-        try performRaise(on: window)
+        windowRaiseAttempted = try performRaise(
+            on: window,
+            application: application
+        )
     }
 
     try await Task.sleep(nanoseconds: 100_000_000)
@@ -7611,75 +7829,318 @@ private func captureRegion(
     return region
 }
 
-private func performMenuItemAction(on candidate: AccessibilityElementCandidate) throws -> String {
-    for action in [kAXPressAction as String, kAXPickAction as String] {
-        guard supportsAXAction(candidate.element, action: action) else {
-            continue
+private struct AXElementCollectionRead {
+    let error: AXError
+    let elements: [AXUIElement]
+}
+
+private struct AXElementCollectionMembershipProbe {
+    let parent: AXUIElement
+    let attribute: CFString
+    let element: AXUIElement
+
+    func isPresent() -> Bool {
+        let read = copyAXElementCollection(from: parent, attribute: attribute)
+        guard read.error == .success else {
+            return false
         }
 
-        let error = AXUIElementPerformAction(candidate.element, action as CFString)
-        if error == .success {
-            return action
-        }
+        return read.elements.contains { CFEqual($0, element) }
     }
 
-    throw RegionShotError.accessibilityQueryFailed("Failed to press child menu item \(formatAccessibilityCandidate(candidate)); tried `AXPress` and `AXPick`.")
+    func isAbsent() -> Bool {
+        let read = copyAXElementCollection(from: parent, attribute: attribute)
+        guard read.error == .success else {
+            return false
+        }
+
+        return !read.elements.contains { CFEqual($0, element) }
+    }
+}
+
+private func membershipProbe(
+    for element: AXUIElement,
+    in parent: AXUIElement,
+    attribute: CFString
+) -> AXElementCollectionMembershipProbe? {
+    let probe = AXElementCollectionMembershipProbe(
+        parent: parent,
+        attribute: attribute,
+        element: element
+    )
+    return probe.isPresent() ? probe : nil
+}
+
+private func directParentMembershipProbe(
+    for element: AXUIElement
+) -> AXElementCollectionMembershipProbe? {
+    guard let parent = copyAXElement(from: element, attribute: kAXParentAttribute as CFString) else {
+        return nil
+    }
+
+    let role = copyAXString(from: element, attribute: kAXRoleAttribute as CFString)
+    let attribute = role == (kAXWindowRole as String)
+        ? kAXWindowsAttribute as CFString
+        : kAXChildrenAttribute as CFString
+    return membershipProbe(for: element, in: parent, attribute: attribute)
+}
+
+private func transientModalDisappearanceProbe(
+    for element: AXUIElement,
+    stoppingAt targetWindow: AXUIElement
+) -> AXElementCollectionMembershipProbe? {
+    var current: AXUIElement? = element
+    var iterationCount = 0
+
+    while let currentElement = current, iterationCount < 64 {
+        let role = copyAXString(from: currentElement, attribute: kAXRoleAttribute as CFString)
+        let subrole = copyAXString(from: currentElement, attribute: kAXSubroleAttribute as CFString)
+        let isTransientModal =
+            role == (kAXSheetRole as String) ||
+            subrole == "AXDialog" ||
+            copyAXBool(from: currentElement, attribute: kAXModalAttribute as CFString) == true
+
+        if isTransientModal, let probe = directParentMembershipProbe(for: currentElement) {
+            return probe
+        }
+
+        if CFEqual(currentElement, targetWindow) {
+            break
+        }
+
+        current = copyAXElement(from: currentElement, attribute: kAXParentAttribute as CFString)
+        iterationCount += 1
+    }
+
+    return nil
+}
+
+private func windowDisappearanceProbe(
+    application: AutomationApplication,
+    window: AXUIElement
+) -> AXElementCollectionMembershipProbe? {
+    membershipProbe(
+        for: window,
+        in: AXUIElementCreateApplication(application.processID),
+        attribute: kAXWindowsAttribute as CFString
+    )
+}
+
+private func windowIsReadyForInput(
+    application: AutomationApplication,
+    window: AXUIElement
+) -> Bool {
+    guard NSWorkspace.shared.frontmostApplication?.processIdentifier == application.processID else {
+        return false
+    }
+
+    let applicationElement = AXUIElementCreateApplication(application.processID)
+    let focusedWindow = copyAXElement(
+        from: applicationElement,
+        attribute: kAXFocusedWindowAttribute as CFString
+    )
+    let mainWindow = copyAXElement(
+        from: applicationElement,
+        attribute: kAXMainWindowAttribute as CFString
+    )
+
+    if focusedWindow.map({ CFEqual($0, window) }) == true ||
+        mainWindow.map({ CFEqual($0, window) }) == true ||
+        copyAXBool(from: window, attribute: kAXFocusedAttribute as CFString) == true
+    {
+        return true
+    }
+
+    guard focusedWindow == nil, mainWindow == nil else {
+        return false
+    }
+
+    return copyAXElements(
+        from: applicationElement,
+        attribute: kAXWindowsAttribute as CFString
+    ).first.map { CFEqual($0, window) } == true
+}
+
+func axPointMatches(
+    _ actual: CGPoint?,
+    expected: CGPoint,
+    tolerance: CGFloat = 1
+) -> Bool {
+    guard let actual else {
+        return false
+    }
+
+    return abs(actual.x - expected.x) <= tolerance &&
+        abs(actual.y - expected.y) <= tolerance
+}
+
+func axSizeMatches(
+    _ actual: CGSize?,
+    expected: CGSize,
+    tolerance: CGFloat = 1
+) -> Bool {
+    guard let actual else {
+        return false
+    }
+
+    return abs(actual.width - expected.width) <= tolerance &&
+        abs(actual.height - expected.height) <= tolerance
+}
+
+private func performMenuItemAction(
+    on candidate: AccessibilityElementCandidate,
+    in menu: AXUIElement
+) throws -> String {
+    let target = formatAccessibilityCandidate(candidate)
+    let menuProbe = directParentMembershipProbe(for: menu)
+    let itemProbe = directParentMembershipProbe(for: candidate.element)
+    let actions = [kAXPressAction as String, kAXPickAction as String]
+        .filter { supportsAXAction(candidate.element, action: $0) }
+
+    guard let primaryAction = actions.first else {
+        throw RegionShotError.accessibilityQueryFailed(
+            "Child menu item \(target) does not support `AXPress` or `AXPick`."
+        )
+    }
+
+    let primaryOutcome = performAXMutationOnce(
+        perform: {
+            AXUIElementPerformAction(candidate.element, primaryAction as CFString)
+        },
+        verifyPostcondition: menuProbe.map { probe in
+            { probe.isAbsent() }
+        }
+    )
+    if primaryOutcome.accepted {
+        return primaryAction
+    }
+
+    let alternateAction = actions.first { $0 != primaryAction }
+    let menuStillVisible = menuProbe?.isPresent() ?? false
+    let itemStillReachable = itemProbe?.isPresent() ?? false
+    if
+        let alternateAction,
+        shouldAttemptAlternateMenuAction(
+            primaryAccepted: false,
+            menuStillVisible: menuStillVisible,
+            itemStillReachable: itemStillReachable,
+            supportsAlternateAction: true
+        )
+    {
+        let alternateOutcome = performAXMutationOnce(
+            perform: {
+                AXUIElementPerformAction(candidate.element, alternateAction as CFString)
+            },
+            verifyPostcondition: menuProbe.map { probe in
+                { probe.isAbsent() }
+            }
+        )
+        if alternateOutcome.accepted {
+            return alternateAction
+        }
+
+        throw RegionShotError.accessibilityQueryFailed(
+            "Failed to press child menu item \(target): `\(primaryAction)` returned \(formatAXError(primaryOutcome.error)); `\(alternateAction)` returned \(formatAXError(alternateOutcome.error))."
+        )
+    }
+
+    throw RegionShotError.accessibilityQueryFailed(
+        "Failed to press child menu item \(target): `\(primaryAction)` returned \(formatAXError(primaryOutcome.error)); no alternate action was attempted because the original menu item was no longer safely reachable."
+    )
 }
 
 private func performSetValue(_ value: String, on element: AXUIElement) throws {
+    let target = formatAccessibilityCandidate(accessibilityElementCandidate(for: element, depth: 0))
     var isSettable = DarwinBoolean(false)
     let settableError = AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &isSettable)
     if settableError == .success, !isSettable.boolValue {
-        throw RegionShotError.accessibilityQueryFailed("Selected element \(formatAXElement(element)) does not allow setting `AXValue`.")
+        throw RegionShotError.accessibilityQueryFailed("Selected element \(target) does not allow setting `AXValue`.")
     }
 
-    let error = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, value as CFString)
-    guard error == .success else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to set `AXValue` on \(formatAXElement(element)) (AX error \(error.rawValue)).")
+    let outcome = performAXMutationOnce(
+        perform: {
+            AXUIElementSetAttributeValue(
+                element,
+                kAXValueAttribute as CFString,
+                value as CFString
+            )
+        },
+        verifyPostcondition: {
+            copyAXString(from: element, attribute: kAXValueAttribute as CFString) == value
+        }
+    )
+    guard outcome.accepted else {
+        throw RegionShotError.accessibilityQueryFailed(
+            "Failed to set `AXValue` on \(target) (AX error \(formatAXError(outcome.error)))."
+        )
     }
 }
 
 private func performSetWindowPosition(_ position: WindowPosition, on element: AXUIElement) throws {
+    let target = formatAccessibilityCandidate(accessibilityElementCandidate(for: element, depth: 0))
     var point = position.point
     guard let value = AXValueCreate(.cgPoint, &point) else {
         throw RegionShotError.accessibilityQueryFailed("Failed to create `AXPosition` value \(position.x),\(position.y).")
     }
 
-    let error = AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, value)
-    guard error == .success else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to set `AXPosition` on \(formatAXElement(element)) (AX error \(error.rawValue)).")
+    let outcome = performAXMutationOnce(
+        perform: {
+            AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, value)
+        },
+        verifyPostcondition: {
+            axPointMatches(
+                copyAXPoint(from: element, attribute: kAXPositionAttribute as CFString),
+                expected: position.point
+            )
+        }
+    )
+    guard outcome.accepted else {
+        throw RegionShotError.accessibilityQueryFailed(
+            "Failed to set `AXPosition` on \(target) (AX error \(formatAXError(outcome.error)))."
+        )
     }
 }
 
 private func performSetWindowSize(_ size: WindowSize, on element: AXUIElement) throws {
+    let target = formatAccessibilityCandidate(accessibilityElementCandidate(for: element, depth: 0))
     var cgSize = size.size
     guard let value = AXValueCreate(.cgSize, &cgSize) else {
         throw RegionShotError.accessibilityQueryFailed("Failed to create `AXSize` value \(size.width),\(size.height).")
     }
 
-    let error = AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, value)
-    guard error == .success else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to set `AXSize` on \(formatAXElement(element)) (AX error \(error.rawValue)).")
+    let outcome = performAXMutationOnce(
+        perform: {
+            AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, value)
+        },
+        verifyPostcondition: {
+            axSizeMatches(
+                copyAXSize(from: element, attribute: kAXSizeAttribute as CFString),
+                expected: size.size
+            )
+        }
+    )
+    guard outcome.accepted else {
+        throw RegionShotError.accessibilityQueryFailed(
+            "Failed to set `AXSize` on \(target) (AX error \(formatAXError(outcome.error)))."
+        )
     }
 }
 
-private func performPress(on element: AXUIElement) throws {
-    let error = AXUIElementPerformAction(element, kAXPressAction as CFString)
-    guard error == .success else {
-        let target = formatAccessibilityCandidate(
-            AccessibilityElementCandidate(
-                element: element,
-                depth: 0,
-                role: copyAXString(from: element, attribute: kAXRoleAttribute as CFString),
-                subrole: copyAXString(from: element, attribute: kAXSubroleAttribute as CFString),
-                title: normalizedTitle(copyAXString(from: element, attribute: kAXTitleAttribute as CFString)),
-                description: normalizedTitle(copyAXString(from: element, attribute: kAXDescriptionAttribute as CFString)),
-                identifier: normalizedTitle(copyAXString(from: element, attribute: kAXIdentifierAttribute as CFString)),
-                frame: copyAXFrame(from: element),
-                actions: copyAXActions(from: element)
-            )
+private func performPress(
+    on element: AXUIElement,
+    verifyPostcondition: (() -> Bool)? = nil
+) throws {
+    let target = formatAccessibilityCandidate(accessibilityElementCandidate(for: element, depth: 0))
+    let outcome = performAXMutationOnce(
+        perform: {
+            AXUIElementPerformAction(element, kAXPressAction as CFString)
+        },
+        verifyPostcondition: verifyPostcondition
+    )
+    guard outcome.accepted else {
+        throw RegionShotError.accessibilityQueryFailed(
+            "Failed to perform `AXPress` on \(target) (AX error \(formatAXError(outcome.error)))."
         )
-        throw RegionShotError.accessibilityQueryFailed("Failed to perform `AXPress` on \(target) (AX error \(error.rawValue)).")
     }
 }
 
@@ -7691,15 +8152,34 @@ private func activateApplication(_ application: AutomationApplication) -> Bool {
     return runningApplication.activate(from: .current, options: [])
 }
 
-private func performRaise(on element: AXUIElement) throws {
-    guard supportsAXAction(element, action: kAXRaiseAction as String) else {
-        throw RegionShotError.accessibilityQueryFailed("Selected window \(formatAXElement(element)) does not support `AXRaise`.")
+private func performRaise(
+    on element: AXUIElement,
+    application: AutomationApplication
+) throws -> Bool {
+    if windowIsReadyForInput(application: application, window: element) {
+        return false
     }
 
-    let error = AXUIElementPerformAction(element, kAXRaiseAction as CFString)
-    guard error == .success else {
-        throw RegionShotError.accessibilityQueryFailed("Failed to perform `AXRaise` on \(formatAXElement(element)) (AX error \(error.rawValue)).")
+    let target = formatAccessibilityCandidate(accessibilityElementCandidate(for: element, depth: 0))
+    guard supportsAXAction(element, action: kAXRaiseAction as String) else {
+        throw RegionShotError.accessibilityQueryFailed("Selected window \(target) does not support `AXRaise`.")
     }
+
+    let outcome = performAXMutationOnce(
+        perform: {
+            AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+        },
+        verifyPostcondition: {
+            windowIsReadyForInput(application: application, window: element)
+        }
+    )
+    guard outcome.accepted else {
+        throw RegionShotError.accessibilityQueryFailed(
+            "Failed to perform `AXRaise` on \(target) (AX error \(formatAXError(outcome.error)))."
+        )
+    }
+
+    return true
 }
 
 private func supportsAXAction(_ element: AXUIElement, action: String) -> Bool {
@@ -7824,11 +8304,24 @@ private func copyAXElement(from element: AXUIElement, attribute: CFString) -> AX
 }
 
 private func copyAXElements(from element: AXUIElement, attribute: CFString) -> [AXUIElement] {
+    let read = copyAXElementCollection(from: element, attribute: attribute)
+    return read.error == .success ? read.elements : []
+}
+
+private func copyAXElementCollection(
+    from element: AXUIElement,
+    attribute: CFString
+) -> AXElementCollectionRead {
     var value: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else {
-        return []
+    let error = AXUIElementCopyAttributeValue(element, attribute, &value)
+    guard error == .success else {
+        return AXElementCollectionRead(error: error, elements: [])
     }
-    return value as? [AXUIElement] ?? []
+
+    return AXElementCollectionRead(
+        error: error,
+        elements: value as? [AXUIElement] ?? []
+    )
 }
 
 private func copyAXActions(from element: AXUIElement) -> [String] {
