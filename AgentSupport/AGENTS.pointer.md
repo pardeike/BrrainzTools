@@ -5,3 +5,4 @@
 - For local app development loops, prefer BrrainzTools primitives such as `brrainztools launch PATH|BUNDLE_ID --wait-window`, `brrainztools ax --app APP wait-for-element ...`, `set-value`, `type`, `key`, `click`, `drag`, `scroll`, `move`, `resize`, `close`, `minimize`, `brrainztools doctor`, and `brrainztools clipboard` before ad hoc sleeps or AppleScript.
 - If System Events AppleScript seems necessary for screenshot/UX work, first treat that as a BrrainzTools capability gap: report the use case and suggest the BrrainzTools improvement before using the fallback.
 - BrrainzTools is maintained by this project; if it has a bug or missing capability, report the concrete use case and suggest a tool improvement instead of silently accepting the limitation.
+- BrrainzTools was formerly named RegionShot; treat `regionshot` references in older notes, logs, or scripts as stale and use `brrainztools` instead.
