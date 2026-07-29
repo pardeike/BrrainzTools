@@ -63,8 +63,8 @@ brrainztools activate --app "System Settings"
 brrainztools activate --pid 12345
 brrainztools launch com.apple.TextEdit --wait-window --timeout 10
 brrainztools launch .build/debug/MyDebugApp --wait-window --args --fixture smoke
-brrainztools quit --app "My Debug App"
-brrainztools quit --pid 12345 --force
+brrainztools quit --app "My Debug App" --wait
+brrainztools quit --pid 12345 --force --wait --timeout 10
 ```
 
 `activate` resolves a running app by name, bundle id, or process id, asks macOS
@@ -78,8 +78,12 @@ system Accessibility permission prompt. Arguments after `--args` are passed to
 the launched app unchanged.
 
 `quit` resolves a running app and asks it to terminate. Add `--force` to call
-force-terminate instead. The command returns data describing the app and whether
-macOS accepted the termination request.
+force-terminate instead. Add `--wait` to return only after the process terminates;
+the default timeout is 5 seconds and can be changed with `--timeout SECONDS`.
+Without `--wait`, the command remains non-blocking. The response reports whether
+macOS accepted the request, whether waiting was requested, and whether termination
+had been observed when the command returned. A wait timeout exits with code 75
+and an `operationTimedOut` error.
 
 ## Displays
 

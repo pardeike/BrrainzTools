@@ -65,7 +65,7 @@ brrainztools ax --app Terminal scroll 0,-800 --role AXScrollArea
 brrainztools ax --app Terminal key cmd+s
 brrainztools ax --app Terminal raise --window-index 0
 brrainztools launch com.apple.TextEdit --wait-window
-brrainztools quit --app TextEdit
+brrainztools quit --app TextEdit --wait
 brrainztools windows --app Terminal --visible
 brrainztools capture --app Terminal --visible-window --output ~/Desktop/terminal.png
 brrainztools capture --app Terminal --with-ocr --max-dimension 1200

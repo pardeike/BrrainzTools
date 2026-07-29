@@ -166,6 +166,8 @@ struct LaunchApplicationCommand: Sendable {
 struct QuitApplicationCommand: Sendable {
     let applicationSelector: ApplicationSelector
     let force: Bool
+    let waitForTermination: Bool
+    let timeout: TimeInterval
 }
 
 struct CaptureCommand: Sendable {
@@ -752,6 +754,8 @@ private struct QuitApplicationResponse: Encodable {
     let application: WindowListApplication
     let force: Bool
     let terminationRequestAccepted: Bool
+    let waitForTermination: Bool
+    let terminated: Bool
 }
 
 private struct BasicEnvelope: Encodable {
@@ -1331,6 +1335,7 @@ enum BrrainzToolsError: LocalizedError, Sendable {
 }
 
 private let defaultScreenCaptureKitTimeout: TimeInterval = 5.0
+private let defaultApplicationTerminationTimeout: TimeInterval = 5.0
 private let defaultLayoutAsciiWidth = 160
 private let defaultLayoutAsciiMaxHeight = 100
 private let defaultToneAsciiWidth = 120
@@ -1523,11 +1528,12 @@ Activates a running app.
 
 private let quitHelpText = """
 Usage:
-  brrainztools quit --app APP [--force]
-  brrainztools quit --app-name NAME [--force]
-  brrainztools quit --pid PID [--force]
+  brrainztools quit --app APP [--force] [--wait [--timeout SECONDS]]
+  brrainztools quit --app-name NAME [--force] [--wait [--timeout SECONDS]]
+  brrainztools quit --pid PID [--force] [--wait [--timeout SECONDS]]
 
-Asks a running app to terminate; `--force` force-terminates it.
+Asks a running app to terminate; `--force` force-terminates it. `--wait`
+returns only after termination is observed, or fails when `--timeout` expires.
 """
 
 private let agentSupportSkillName = "brrainztools"
@@ -1784,14 +1790,82 @@ func quit(using command: QuitApplicationCommand) throws -> String {
     let accepted = command.force
         ? (runningApplication?.forceTerminate() ?? false)
         : (runningApplication?.terminate() ?? false)
+    var terminated = applicationHasTerminated(
+        runningApplication,
+        processID: application.processID
+    )
+
+    if command.waitForTermination, !terminated {
+        terminated = waitForApplicationTermination(
+            timeout: command.timeout,
+            isTerminated: {
+                applicationHasTerminated(
+                    runningApplication,
+                    processID: application.processID
+                )
+            }
+        )
+
+        guard terminated else {
+            let requestKind = command.force ? "force-termination" : "termination"
+            let acceptance = accepted ? "accepted" : "did not accept"
+            let recovery = command.force
+                ? "Retry with a longer `--timeout` if the process needs more time to exit."
+                : "Retry with `--force --wait` or a longer `--timeout`."
+            throw BrrainzToolsError.operationTimedOut(
+                "`\(application.name)` (pid \(application.processID)) did not terminate within \(formatSeconds(command.timeout)); macOS \(acceptance) the \(requestKind) request. \(recovery)"
+            )
+        }
+    }
 
     return try encodeJSON(
         QuitApplicationResponse(
             application: windowListApplication(for: application),
             force: command.force,
-            terminationRequestAccepted: accepted
+            terminationRequestAccepted: accepted,
+            waitForTermination: command.waitForTermination,
+            terminated: terminated
         )
     )
+}
+
+private func applicationHasTerminated(
+    _ runningApplication: NSRunningApplication?,
+    processID: pid_t
+) -> Bool {
+    if runningApplication?.isTerminated == true {
+        return true
+    }
+
+    if let currentApplication = NSRunningApplication(processIdentifier: processID) {
+        return currentApplication.isTerminated
+    }
+
+    errno = 0
+    return Darwin.kill(processID, 0) != 0 && errno == ESRCH
+}
+
+func waitForApplicationTermination(
+    timeout: TimeInterval,
+    pollInterval: TimeInterval = 0.05,
+    now: () -> Date = Date.init,
+    sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) },
+    isTerminated: () -> Bool
+) -> Bool {
+    let deadline = now().addingTimeInterval(timeout)
+
+    while true {
+        if isTerminated() {
+            return true
+        }
+
+        let remaining = deadline.timeIntervalSince(now())
+        guard remaining > 0 else {
+            return false
+        }
+
+        sleep(min(pollInterval, remaining))
+    }
 }
 
 private func launchApplication(target: LaunchTarget, arguments: [String]) throws -> LaunchedApplication {
@@ -3498,14 +3572,32 @@ private func looksLikeLaunchPath(_ value: String) -> Bool {
 
 func parseQuitApplicationCommand(arguments: [String]) throws -> QuitApplicationCommand {
     var force = false
+    var waitForTermination = false
+    var timeout = defaultApplicationTerminationTimeout
+    var timeoutWasSpecified = false
     var filteredArguments: [String] = []
     filteredArguments.reserveCapacity(arguments.count)
+    var index = 0
 
-    for argument in arguments {
-        if argument == "--force" {
+    while index < arguments.count {
+        switch arguments[index] {
+        case "--force":
             force = true
-        } else {
-            filteredArguments.append(argument)
+            index += 1
+        case "--wait":
+            waitForTermination = true
+            index += 1
+        case "--timeout":
+            let valueIndex = index + 1
+            guard valueIndex < arguments.count else {
+                throw BrrainzToolsError.invalidArguments("Missing value for --timeout.")
+            }
+            timeout = try parseTimeout(arguments[valueIndex])
+            timeoutWasSpecified = true
+            index += 2
+        default:
+            filteredArguments.append(arguments[index])
+            index += 1
         }
     }
 
@@ -3514,14 +3606,23 @@ func parseQuitApplicationCommand(arguments: [String]) throws -> QuitApplicationC
     let hasOtherValue = parsed.values.keys.contains { !allowedValueKeys.contains($0) }
 
     if parsed.region != nil || hasOtherValue || !parsed.flags.isEmpty {
-        throw BrrainzToolsError.invalidArguments("`quit` accepts only an app selector (`--app`, `--app-name`, or `--pid`) and optional `--force`.")
+        throw BrrainzToolsError.invalidArguments("`quit` accepts only an app selector (`--app`, `--app-name`, or `--pid`), optional `--force`, and optional `--wait [--timeout SECONDS]`.")
     }
 
     guard let applicationSelector = try parseApplicationSelector(values: parsed.values) else {
         throw BrrainzToolsError.invalidArguments("`quit` requires an app selector (`--app`, `--app-name`, or `--pid`).")
     }
 
-    return QuitApplicationCommand(applicationSelector: applicationSelector, force: force)
+    if timeoutWasSpecified, !waitForTermination {
+        throw BrrainzToolsError.invalidArguments("`quit --timeout` requires `--wait`; quit without waiting does not use a timeout.")
+    }
+
+    return QuitApplicationCommand(
+        applicationSelector: applicationSelector,
+        force: force,
+        waitForTermination: waitForTermination,
+        timeout: timeout
+    )
 }
 
 func parseApplicationSelector(values: [String: String]) throws -> ApplicationSelector? {

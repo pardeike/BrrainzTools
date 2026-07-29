@@ -408,6 +408,8 @@ final class BrrainzToolsTests: XCTestCase {
 
         XCTAssertEqual(name, "Terminal")
         XCTAssertFalse(command.force)
+        XCTAssertFalse(command.waitForTermination)
+        XCTAssertEqual(command.timeout, 5.0, accuracy: 0.001)
     }
 
     func testQuitApplicationParsingSupportsForceAndPID() throws {
@@ -423,6 +425,43 @@ final class BrrainzToolsTests: XCTestCase {
 
         XCTAssertEqual(processID, 123)
         XCTAssertTrue(command.force)
+        XCTAssertFalse(command.waitForTermination)
+    }
+
+    func testQuitApplicationParsingSupportsWaitAndTimeout() throws {
+        let behavior = try parse(arguments: [
+            "quit",
+            "--wait",
+            "--app", "Terminal",
+            "--timeout", "2.5",
+            "--force",
+        ])
+
+        guard case .quitApplication(let command) = behavior else {
+            return XCTFail("Expected quit application behavior.")
+        }
+
+        XCTAssertTrue(command.force)
+        XCTAssertTrue(command.waitForTermination)
+        XCTAssertEqual(command.timeout, 2.5, accuracy: 0.001)
+    }
+
+    func testQuitApplicationRejectsTimeoutWithoutWait() {
+        XCTAssertThrowsError(
+            try parse(arguments: ["quit", "--app", "Terminal", "--timeout", "2.5"])
+        ) { error in
+            XCTAssertTrue(String(describing: error).contains("--timeout"))
+            XCTAssertTrue(String(describing: error).contains("--wait"))
+        }
+    }
+
+    func testQuitApplicationRejectsInvalidWaitTimeout() {
+        XCTAssertThrowsError(
+            try parse(arguments: ["quit", "--app", "Terminal", "--wait", "--timeout", "never"])
+        ) { error in
+            XCTAssertTrue(String(describing: error).contains("--timeout"))
+            XCTAssertTrue(String(describing: error).contains("positive"))
+        }
     }
 
     func testQuitApplicationRejectsMissingSelector() {
@@ -440,6 +479,55 @@ final class BrrainzToolsTests: XCTestCase {
         ) { error in
             XCTAssertTrue(String(describing: error).contains("quit"))
         }
+    }
+
+    func testWaitForApplicationTerminationReturnsAfterObservedExit() {
+        var currentTime = 0.0
+        var checks = 0
+        var sleepDurations: [TimeInterval] = []
+
+        let terminated = waitForApplicationTermination(
+            timeout: 1,
+            pollInterval: 0.05,
+            now: { Date(timeIntervalSinceReferenceDate: currentTime) },
+            sleep: {
+                sleepDurations.append($0)
+                currentTime += $0
+            },
+            isTerminated: {
+                checks += 1
+                return checks == 3
+            }
+        )
+
+        XCTAssertTrue(terminated)
+        XCTAssertEqual(checks, 3)
+        XCTAssertEqual(sleepDurations, [0.05, 0.05])
+    }
+
+    func testWaitForApplicationTerminationStopsAtTimeout() {
+        var currentTime = 0.0
+        var checks = 0
+        var sleepDurations: [TimeInterval] = []
+
+        let terminated = waitForApplicationTermination(
+            timeout: 0.12,
+            pollInterval: 0.05,
+            now: { Date(timeIntervalSinceReferenceDate: currentTime) },
+            sleep: {
+                sleepDurations.append($0)
+                currentTime += $0
+            },
+            isTerminated: {
+                checks += 1
+                return false
+            }
+        )
+
+        XCTAssertFalse(terminated)
+        XCTAssertEqual(checks, 4)
+        XCTAssertEqual(sleepDurations.count, 3)
+        XCTAssertEqual(sleepDurations.reduce(0, +), 0.12, accuracy: 0.001)
     }
 
     func testListDisplaysParsing() throws {

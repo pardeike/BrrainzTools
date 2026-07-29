@@ -16,7 +16,7 @@ Prefer it over raw `screencapture`, generic screenshots, System Events AppleScri
 - list windows with `brrainztools windows --app APP [--visible|--ax]`
 - inspect Accessibility trees and state with `brrainztools ax --app APP tree|get|wait-for-element`, including `value`, `enabled`, `focused`, `selected`, stable `path` selectors, `--interactive`, `--flat`, `--depth`, `--max-children`, and `--roles`
 - act on UI with `brrainztools ax --app APP press|set-value|type|key|click|drag|scroll`, including selector-targeted scrolling such as `scroll 0,-800 --path 0.3.1`
-- launch, activate, quit, wait for windows/elements, move/resize/raise/close/minimize windows, and read/set clipboard text
+- launch, activate, quit (including `quit --wait` for deterministic relaunches), wait for windows/elements, move/resize/raise/close/minimize windows, and read/set clipboard text
 - check permissions without prompting with `brrainztools doctor`, and add `--no-prompt` to Accessibility/menu/waiting commands when unattended behavior matters
 
 It is designed for agent use and may already be authorized for local screen capture and Accessibility workflows.
@@ -31,7 +31,7 @@ Do not copy a command list into context. The top-level help is a short subcomman
 
 When the exact app name is unknown, use BrrainzTools's app discovery before falling back to process searches. If ScreenCaptureKit app/window capture fails or visible pixels are enough, use the visible-window listing/capture modes before raw rectangle capture; visible-window modes include app-owned floating panels. If Screen Recording permission blocks app/window inspection but Accessibility works, use `brrainztools ax --app APP windows` to inspect AX windows and `brrainztools ax --app APP raise --window-index N` to bring a specific AX window forward. Use menu-bar modes for visible UI that is not a normal app window, such as status-item menus or popovers from accessory/background apps. Use `brrainztools menu --app APP press-item TEXT` after selecting a menu-bar item when you need to choose a child item inside a status menu. Use raw coordinate/rectangle capture only when the UI is visible but not exposed through BrrainzTools's app/window/visible-window/menu-bar commands.
 
-For a local app development loop, prefer BrrainzTools's observe-act primitives before ad hoc sleeps: `brrainztools launch PATH|BUNDLE_ID --wait-window`, `brrainztools ax --app APP wait-for-element ...`, `brrainztools ax --app APP set-value ...`, `brrainztools ax --app APP type ...`, `brrainztools ax --app APP key cmd+s`, `brrainztools ax --app APP click X,Y`, and `brrainztools quit --app APP`.
+For a local app development loop, prefer BrrainzTools's observe-act primitives before ad hoc sleeps: `brrainztools launch PATH|BUNDLE_ID --wait-window`, `brrainztools ax --app APP wait-for-element ...`, `brrainztools ax --app APP set-value ...`, `brrainztools ax --app APP type ...`, `brrainztools ax --app APP key cmd+s`, `brrainztools ax --app APP click X,Y`, and `brrainztools quit --app APP --wait`. Use `quit --wait` before immediately relaunching the same app so the next launch cannot attach to a process that is still terminating.
 
 When scrolling a known panel, prefer `brrainztools ax --app APP scroll DX,DY --path PATH` (or another element selector) so the event is posted inside that element's visible frame instead of at the window center. This is especially useful when buttons or other workflow-changing controls sit outside the scroll area.
 
