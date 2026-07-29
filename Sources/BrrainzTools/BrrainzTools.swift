@@ -541,7 +541,7 @@ enum AccessibilityMode: Sendable {
     case keyChord(KeyChord)
     case click(MouseClick)
     case drag(WindowDrag)
-    case scroll(ScrollDelta)
+    case scroll(ScrollDelta, AccessibilitySelector?)
     case pressAt(WindowPoint)
     case pressElement(AccessibilitySelector)
     case raiseWindow
@@ -984,6 +984,8 @@ private struct MouseActionResponse: Encodable {
     let application: WindowListApplication
     let window: AccessibilityWindowEntry
     let mode: String
+    let selector: AccessibilitySelectorResponse?
+    let matched: AccessibilityElementResponse?
     let button: String?
     let clickCount: Int?
     let point: JSONPoint?
@@ -1421,7 +1423,7 @@ Actions:
   element-at X,Y
   click X,Y [--right] [--double]
   drag X1,Y1,X2,Y2
-  scroll DX,DY
+  scroll DX,DY [selectors]
   raise
   close
   minimize
@@ -1439,6 +1441,8 @@ Selectors/options:
   --depth N --max-children N --roles ROLE[,ROLE...] --interactive --flat
   --timeout SECONDS
   --no-prompt
+
+Element selectors apply to get, wait-for-element, set-value, scroll, and press.
 """
 
 private let menuHelpText = """
@@ -2624,7 +2628,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     } else if let drag {
         accessibilityMode = .drag(drag)
     } else if let scrollDelta {
-        accessibilityMode = .scroll(scrollDelta)
+        accessibilityMode = .scroll(scrollDelta, selector.isEmpty ? nil : selector)
     } else if wantsAccessibilityPress {
         accessibilityMode = .pressElement(selector)
     } else if let pressPoint {
@@ -2904,8 +2908,8 @@ func parse(arguments: [String]) throws -> CommandBehavior {
         throw BrrainzToolsError.invalidArguments("`--press` (alias: `--press-element`) requires at least one selector field: `--path`, `--role`, `--subrole`, `--title`, `--identifier`, or `--description`.")
     }
 
-    if !wantsAccessibilityGet, !wantsAccessibilityWaitForElement, !wantsAccessibilitySetValue, !wantsAccessibilityPress, !selector.isEmpty {
-        throw BrrainzToolsError.invalidArguments("Selector fields require `--get`/`--get-element`, `--wait-for-element`, `--set-value`, or `--press`/`--press-element`.")
+    if !wantsAccessibilityGet, !wantsAccessibilityWaitForElement, !wantsAccessibilitySetValue, !wantsAccessibilityPress, scrollDelta == nil, !selector.isEmpty {
+        throw BrrainzToolsError.invalidArguments("Selector fields require `--get`/`--get-element`, `--wait-for-element`, `--set-value`, `--scroll`, or `--press`/`--press-element`.")
     }
 
     if pressPoint != nil, !selector.isEmpty {
@@ -3174,10 +3178,6 @@ private let subcommandValueOptionFlags: Set<String> = [
 ]
 
 private func parseAXSubcommand(arguments: [String]) throws -> CommandBehavior {
-    if arguments.isEmpty || isHelpRequest(arguments) {
-        return .showHelpText(axHelpText)
-    }
-
     let flagActions = [
         "windows": "--list-accessibility-windows",
         "tree": "--list-elements",
@@ -3203,6 +3203,12 @@ private func parseAXSubcommand(arguments: [String]) throws -> CommandBehavior {
         "resize": "--resize-window",
     ]
 
+    if arguments.isEmpty ||
+        isHelpRequest(arguments) ||
+        isActionHelpRequest(arguments, actionNames: Set(flagActions.keys).union(valueActions.keys)) {
+        return .showHelpText(axHelpText)
+    }
+
     let translated = try translateActionSubcommand(
         name: "ax",
         arguments: arguments,
@@ -3213,23 +3219,40 @@ private func parseAXSubcommand(arguments: [String]) throws -> CommandBehavior {
 }
 
 private func parseMenuSubcommand(arguments: [String]) throws -> CommandBehavior {
-    if arguments.isEmpty || isHelpRequest(arguments) {
+    let flagActions = [
+        "list": "--list-menu-bar-items",
+        "press": "--menu-bar-press",
+        "capture": "--capture-menu",
+    ]
+    let valueActions = [
+        "press-item": "--press-menu-item",
+    ]
+
+    if arguments.isEmpty ||
+        isHelpRequest(arguments) ||
+        isActionHelpRequest(arguments, actionNames: Set(flagActions.keys).union(valueActions.keys)) {
         return .showHelpText(menuHelpText)
     }
 
     let translated = try translateActionSubcommand(
         name: "menu",
         arguments: arguments,
-        flagActions: [
-            "list": "--list-menu-bar-items",
-            "press": "--menu-bar-press",
-            "capture": "--capture-menu",
-        ],
-        valueActions: [
-            "press-item": "--press-menu-item",
-        ]
+        flagActions: flagActions,
+        valueActions: valueActions
     )
     return try parse(arguments: translated)
+}
+
+private func isActionHelpRequest(_ arguments: [String], actionNames: Set<String>) -> Bool {
+    guard
+        let last = arguments.last,
+        last == "--help" || last == "-h",
+        let action = firstUnknownActionToken(in: Array(arguments.dropLast()))
+    else {
+        return false
+    }
+
+    return actionNames.contains(action)
 }
 
 private func translateActionSubcommand(
@@ -4508,6 +4531,8 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
             application: windowListApplication(for: catalog.application),
             window: accessibilityWindowEntry(for: selectedWindow),
             mode: "click",
+            selector: nil,
+            matched: nil,
             button: click.button.rawValue,
             clickCount: click.clickCount,
             point: JSONPoint(click.point.point),
@@ -4531,6 +4556,8 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
             application: windowListApplication(for: catalog.application),
             window: accessibilityWindowEntry(for: selectedWindow),
             mode: "drag",
+            selector: nil,
+            matched: nil,
             button: MouseButton.left.rawValue,
             clickCount: nil,
             point: JSONPoint(drag.start.point),
@@ -4543,19 +4570,53 @@ private func inspectAccessibility(using command: AccessibilityCommand) async thr
             windowRaiseAttempted: preparation.windowRaiseAttempted
         )
         return try encodeJSON(response)
-    case .scroll(let delta):
-        let point = centerPoint(in: selectedWindow.frame)
-        let screenPoint = screenPoint(for: point, in: selectedWindow.frame)
+    case .scroll(let delta, let selector):
+        let selectedElement = try selector.map {
+            try selectAccessibilityElement(in: accessibilityWindow, using: $0)
+        }
+        let targetScreenPoint: CGPoint
+        let point: CGPoint
+
+        if let selector, let selectedElement {
+            guard
+                let elementFrame = selectedElement.frame,
+                let visibleCenter = visibleCenterPoint(of: elementFrame, within: selectedWindow.frame)
+            else {
+                throw BrrainzToolsError.accessibilityQueryFailed(
+                    "Accessibility element matching \(describe(selector: selector)) has no visible frame inside window `\(displayTitle(selectedWindow.title))`."
+                )
+            }
+
+            targetScreenPoint = visibleCenter
+            point = CGPoint(
+                x: targetScreenPoint.x - selectedWindow.frame.minX,
+                y: targetScreenPoint.y - selectedWindow.frame.minY
+            )
+        } else {
+            let windowPoint = centerPoint(in: selectedWindow.frame)
+            point = windowPoint.point
+            targetScreenPoint = screenPoint(for: windowPoint, in: selectedWindow.frame)
+        }
+
+        let matchedSnapshot = selectedElement.map {
+            accessibilityElementResponse(
+                for: $0.element,
+                depthRemaining: 0,
+                path: selector?.path
+            )
+        }
         let preparation = try await prepareForMouseInput(application: catalog.application, window: accessibilityWindow)
-        try postScroll(delta, at: screenPoint)
+        try postScroll(delta, at: targetScreenPoint)
         let response = MouseActionResponse(
             application: windowListApplication(for: catalog.application),
             window: accessibilityWindowEntry(for: selectedWindow),
             mode: "scroll",
+            selector: selector.map(accessibilitySelectorResponse(for:)),
+            matched: matchedSnapshot,
             button: nil,
             clickCount: nil,
-            point: JSONPoint(point.point),
-            screenPoint: JSONPoint(screenPoint),
+            point: JSONPoint(point),
+            screenPoint: JSONPoint(targetScreenPoint),
             endPoint: nil,
             screenEndPoint: nil,
             deltaX: delta.x,
@@ -7613,6 +7674,15 @@ private func centerPoint(in windowFrame: CGRect) -> WindowPoint {
         x: max(0, Int((windowFrame.width / 2).rounded(.down))),
         y: max(0, Int((windowFrame.height / 2).rounded(.down)))
     )
+}
+
+func visibleCenterPoint(of targetFrame: CGRect, within windowFrame: CGRect) -> CGPoint? {
+    let visibleFrame = targetFrame.intersection(windowFrame)
+    guard !visibleFrame.isNull, !visibleFrame.isEmpty else {
+        return nil
+    }
+
+    return CGPoint(x: visibleFrame.midX, y: visibleFrame.midY)
 }
 
 private func postMouseClick(_ click: MouseClick, at screenPoint: CGPoint) throws {

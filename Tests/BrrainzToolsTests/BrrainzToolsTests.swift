@@ -48,6 +48,26 @@ final class BrrainzToolsTests: XCTestCase {
         XCTAssertTrue(doctorText.contains("brrainztools doctor"))
     }
 
+    func testActionSubcommandHelpParsing() throws {
+        for arguments in [
+            ["ax", "scroll", "--help"],
+            ["ax", "--app", "Terminal", "scroll", "0,-120", "--help"],
+            ["ax", "get", "-h"],
+        ] {
+            let behavior = try parse(arguments: arguments)
+            guard case .showHelpText(let text) = behavior else {
+                return XCTFail("Expected AX help for \(arguments).")
+            }
+            XCTAssertTrue(text.contains("brrainztools ax"))
+        }
+
+        let menuBehavior = try parse(arguments: ["menu", "press-item", "--help"])
+        guard case .showHelpText(let menuText) = menuBehavior else {
+            return XCTFail("Expected menu help.")
+        }
+        XCTAssertTrue(menuText.contains("brrainztools menu"))
+    }
+
     func testCaptureSubcommandForwardsToLegacyCaptureParser() throws {
         let behavior = try parse(arguments: ["capture", "1", "2", "3", "4", "--raw"])
 
@@ -1360,12 +1380,52 @@ final class BrrainzToolsTests: XCTestCase {
             return XCTFail("Expected accessibility inspection behavior.")
         }
 
-        guard case .scroll(let delta) = scrollCommand.mode else {
+        guard case .scroll(let delta, let selector) = scrollCommand.mode else {
             return XCTFail("Expected mouse scroll mode.")
         }
 
         XCTAssertEqual(delta.x, -5)
         XCTAssertEqual(delta.y, 12)
+        XCTAssertNil(selector)
+    }
+
+    func testAccessibilityScrollParsingSupportsElementSelectors() throws {
+        let pathBehavior = try parse(arguments: [
+            "ax",
+            "--app", "Terminal",
+            "scroll", "0,-240",
+            "--path", "0.3.1",
+        ])
+
+        guard case .inspectAccessibility(let pathCommand) = pathBehavior else {
+            return XCTFail("Expected accessibility inspection behavior.")
+        }
+
+        guard case .scroll(let pathDelta, let pathSelector?) = pathCommand.mode else {
+            return XCTFail("Expected targeted mouse scroll mode.")
+        }
+
+        XCTAssertEqual(pathDelta.x, 0)
+        XCTAssertEqual(pathDelta.y, -240)
+        XCTAssertEqual(pathSelector.path, "0.3.1")
+        XCTAssertNil(pathSelector.role)
+
+        let roleBehavior = try parse(arguments: [
+            "--app", "Terminal",
+            "--scroll", "0,120",
+            "--role", "AXScrollArea",
+        ])
+
+        guard case .inspectAccessibility(let roleCommand) = roleBehavior else {
+            return XCTFail("Expected accessibility inspection behavior.")
+        }
+
+        guard case .scroll(_, let roleSelector?) = roleCommand.mode else {
+            return XCTFail("Expected selector-targeted mouse scroll mode.")
+        }
+
+        XCTAssertNil(roleSelector.path)
+        XCTAssertEqual(roleSelector.role, "AXScrollArea")
     }
 
     func testAccessibilityMouseActionsRejectInvalidCombinations() {
@@ -1406,8 +1466,40 @@ final class BrrainzToolsTests: XCTestCase {
             XCTAssertTrue(String(describing: error).contains("--get"))
             XCTAssertTrue(String(describing: error).contains("--wait-for-element"))
             XCTAssertTrue(String(describing: error).contains("--set-value"))
+            XCTAssertTrue(String(describing: error).contains("--scroll"))
             XCTAssertTrue(String(describing: error).contains("--press"))
         }
+    }
+
+    func testVisibleCenterPointClipsTargetToSelectedWindow() {
+        let window = CGRect(x: 100, y: 200, width: 300, height: 400)
+
+        XCTAssertEqual(
+            visibleCenterPoint(
+                of: CGRect(x: 150, y: 250, width: 100, height: 80),
+                within: window
+            ),
+            CGPoint(x: 200, y: 290)
+        )
+        XCTAssertEqual(
+            visibleCenterPoint(
+                of: CGRect(x: 350, y: 550, width: 100, height: 100),
+                within: window
+            ),
+            CGPoint(x: 375, y: 575)
+        )
+        XCTAssertNil(
+            visibleCenterPoint(
+                of: CGRect(x: 0, y: 0, width: 50, height: 50),
+                within: window
+            )
+        )
+        XCTAssertNil(
+            visibleCenterPoint(
+                of: CGRect(x: 150, y: 250, width: 0, height: 80),
+                within: window
+            )
+        )
     }
 
     func testAccessibilityGetElementRejectsMixedAccessibilityMode() {

@@ -61,6 +61,7 @@ brrainztools apps Terminal
 brrainztools ax --app Terminal windows
 brrainztools ax --app Terminal tree --interactive --flat
 brrainztools ax --app Terminal set-value "text" --path 0.3.1
+brrainztools ax --app Terminal scroll 0,-800 --role AXScrollArea
 brrainztools ax --app Terminal key cmd+s
 brrainztools ax --app Terminal raise --window-index 0
 brrainztools launch com.apple.TextEdit --wait-window

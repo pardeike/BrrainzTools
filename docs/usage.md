@@ -235,6 +235,8 @@ brrainztools --app "System Settings" --click 24,24
 brrainztools --app "System Settings" --click 24,24 --right
 brrainztools --app "System Settings" --drag 24,24,160,24
 brrainztools --app "System Settings" --scroll 0,-800
+brrainztools --app "System Settings" --scroll 0,-800 --path 0.3.1
+brrainztools --app "System Settings" --scroll 0,-800 --role AXScrollArea
 brrainztools --app "System Settings" --press --role AXButton --title Done
 brrainztools --app "System Settings" --press-at 14,14
 brrainztools --app "System Settings" --element-at 14,14
@@ -251,9 +253,9 @@ expand the tree. Use `--roles ROLE[,ROLE...]` to keep only matching roles and
 their ancestors, `--interactive` to keep elements with actions and their
 ancestors, and `--flat` to return a flat `elements` array instead of a nested
 tree. Empty `actions` arrays are omitted from element JSON.
-Use `--path PATH` with `--get`, `--wait-for-element`, `--set-value`, or `--press`
-to target a listed element directly. Paths cannot be combined with fuzzy selector
-fields such as `--role` or `--title`.
+Use `--path PATH` with `--get`, `--wait-for-element`, `--set-value`, `--scroll`,
+or `--press` to target a listed element directly. Paths cannot be combined with
+fuzzy selector fields such as `--role` or `--title`.
 
 `--wait-for-window TITLE` polls the app's accessibility windows until one title
 matches, then returns that window as JSON. Use `--timeout SECONDS` to adjust the
@@ -277,8 +279,12 @@ can be used to clear text fields that support `AXValue` writes.
 
 `--click X,Y`, `--drag X1,Y1,X2,Y2`, and `--scroll DX,DY` activate the app,
 raise the selected window when supported, and post CGEvent mouse input. Click and
-drag coordinates are window-relative points. Scroll is posted at the selected
-window's center point and accepts signed horizontal/vertical deltas.
+drag coordinates are window-relative points. Scroll accepts signed
+horizontal/vertical deltas. Without an element selector, it is posted at the
+selected window's center. With `--path`, `--role`, `--title`, or another element
+selector, it is posted at the center of the matched element's visible frame and
+the JSON response includes the selector and matched element. A frame-less or
+fully off-window match fails without posting input.
 
 `--press` finds a pressable accessibility element using selector fields such as
 `--role`, `--subrole`, `--title`, `--identifier`, and `--description`, then
