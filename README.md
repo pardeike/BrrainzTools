@@ -14,6 +14,7 @@ thing instead of guessing screen rectangles:
 - open and capture a menu-bar item
 - read accessibility element state and press/set/type/key/click/drag/scroll UI
 - launch, activate, quit, and wait for local apps
+- reveal a file or directory as a Finder selection
 - read or set clipboard text
 - convert a screenshot to a compact text view
 
@@ -66,6 +67,7 @@ brrainztools ax --app Terminal key cmd+s
 brrainztools ax --app Terminal raise --window-index 0
 brrainztools launch com.apple.TextEdit --wait-window
 brrainztools quit --app TextEdit --wait
+brrainztools reveal ./README.md
 brrainztools windows --app Terminal --visible
 brrainztools capture --app Terminal --visible-window --output ~/Desktop/terminal.png
 brrainztools capture --app Terminal --with-ocr --max-dimension 1200

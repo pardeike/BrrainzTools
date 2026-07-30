@@ -31,6 +31,9 @@ struct BrrainzTools {
             case .clipboard(let command):
                 let json = try handleClipboard(using: command)
                 print(try dataEnvelopeJSON(mode: "clipboard", dataJSON: json))
+            case .revealFile(let command):
+                let json = try reveal(using: command)
+                print(try dataEnvelopeJSON(mode: "reveal", dataJSON: json))
             case .listDisplays:
                 let json = try listDisplays()
                 print(try dataEnvelopeJSON(mode: "displays", dataJSON: json))
@@ -128,6 +131,7 @@ enum CommandBehavior: Sendable {
     case showVersion
     case doctor
     case clipboard(ClipboardCommand)
+    case revealFile(RevealCommand)
     case listDisplays
     case activateApplication(ActivateApplicationCommand)
     case launchApplication(LaunchApplicationCommand)
@@ -145,7 +149,7 @@ enum CommandBehavior: Sendable {
         switch self {
         case .showHelp, .showHelpText, .showVersion, .doctor, .clipboard, .listDisplays:
             return false
-        case .activateApplication, .launchApplication, .quitApplication, .findApps, .asciiArt, .capture, .captureVisibleWindow, .listWindows, .listVisibleWindows, .inspectAccessibility, .menuBar:
+        case .revealFile, .activateApplication, .launchApplication, .quitApplication, .findApps, .asciiArt, .capture, .captureVisibleWindow, .listWindows, .listVisibleWindows, .inspectAccessibility, .menuBar:
             return true
         }
     }
@@ -194,6 +198,10 @@ struct FindAppsCommand: Sendable {
 
 struct ClipboardCommand: Sendable {
     let setText: String?
+}
+
+struct RevealCommand: Sendable {
+    let path: String
 }
 
 struct AsciiArtCommand: Sendable {
@@ -723,6 +731,10 @@ struct ClipboardResponse: Encodable {
     let text: String?
 }
 
+struct RevealResponse: Encodable {
+    let path: String
+}
+
 struct DisplayListResponse: Encodable {
     let displays: [DisplayEntry]
 }
@@ -1244,6 +1256,7 @@ enum BrrainzToolsError: LocalizedError, Sendable {
     case ambiguousApplication(String)
     case windowNotFound(String)
     case ambiguousWindow(String)
+    case pathNotFound(String)
     case launchFailed(String)
     case captureFailed(String)
     case operationTimedOut(String)
@@ -1270,6 +1283,8 @@ enum BrrainzToolsError: LocalizedError, Sendable {
             return "windowNotFound"
         case .ambiguousWindow:
             return "ambiguousWindow"
+        case .pathNotFound:
+            return "pathNotFound"
         case .launchFailed:
             return "launchFailed"
         case .captureFailed:
@@ -1303,6 +1318,8 @@ enum BrrainzToolsError: LocalizedError, Sendable {
             return message
         case .ambiguousWindow(let message):
             return message
+        case .pathNotFound(let message):
+            return message
         case .launchFailed(let message):
             return message
         case .captureFailed(let message):
@@ -1322,7 +1339,7 @@ enum BrrainzToolsError: LocalizedError, Sendable {
             return 64
         case .ambiguousApplication, .ambiguousWindow:
             return 65
-        case .applicationNotFound, .windowNotFound:
+        case .applicationNotFound, .windowNotFound, .pathNotFound:
             return 66
         case .capturePermissionDenied, .accessibilityPermissionDenied:
             return 69
@@ -1363,6 +1380,7 @@ Subcommands:
   ax        AX tree/get/press/input/window actions
   menu      menu-bar list/press/press-item/capture
   ascii     image to ASCII/OCR text
+  reveal    select a file or directory in Finder
   displays | doctor | clipboard
   launch | activate | quit
 
@@ -1507,6 +1525,14 @@ Usage:
   brrainztools clipboard --set TEXT
 
 Reads or sets plain text on the general pasteboard.
+"""
+
+private let revealHelpText = """
+Usage:
+  brrainztools reveal PATH
+
+Opens Finder and selects the file or directory at PATH. Relative paths and `~`
+are resolved before Finder is asked to reveal the item.
 """
 
 private let launchHelpText = """
@@ -1740,6 +1766,21 @@ func handleClipboard(using command: ClipboardCommand) throws -> String {
             text: pasteboard.string(forType: .string)
         )
     )
+}
+
+func reveal(
+    using command: RevealCommand,
+    fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) },
+    revealURLs: ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) }
+) throws -> String {
+    let url = fileURL(from: command.path)
+
+    guard fileExists(url.path) else {
+        throw BrrainzToolsError.pathNotFound("No file or directory exists at `\(url.path)`.")
+    }
+
+    revealURLs([url])
+    return try encodeJSON(RevealResponse(path: url.path))
 }
 
 func listDisplays() throws -> String {
@@ -2402,6 +2443,10 @@ func parse(arguments: [String]) throws -> CommandBehavior {
 
     if arguments.first == "clipboard" {
         return .clipboard(try parseClipboardCommand(arguments: Array(arguments.dropFirst())))
+    }
+
+    if arguments.first == "reveal" {
+        return .revealFile(try parseRevealCommand(arguments: Array(arguments.dropFirst())))
     }
 
     if arguments.first == "activate" {
@@ -3117,6 +3162,8 @@ private func parseSubcommand(arguments: [String]) throws -> CommandBehavior? {
         return isHelpRequest(trailingArguments) ? .showHelpText(doctorHelpText) : nil
     case "clipboard":
         return isHelpRequest(trailingArguments) ? .showHelpText(clipboardHelpText) : nil
+    case "reveal":
+        return isHelpRequest(trailingArguments) ? .showHelpText(revealHelpText) : nil
     case "launch":
         return isHelpRequest(trailingArguments) ? .showHelpText(launchHelpText) : nil
     case "activate":
@@ -3475,6 +3522,19 @@ func parseClipboardCommand(arguments: [String]) throws -> ClipboardCommand {
     }
 
     return ClipboardCommand(setText: arguments[1])
+}
+
+func parseRevealCommand(arguments: [String]) throws -> RevealCommand {
+    guard arguments.count == 1 else {
+        throw BrrainzToolsError.invalidArguments("`reveal` requires exactly one PATH.")
+    }
+
+    let path = arguments[0]
+    guard !path.isEmpty else {
+        throw BrrainzToolsError.invalidArguments("`reveal` requires a non-empty PATH.")
+    }
+
+    return RevealCommand(path: path)
 }
 
 func parseActivateApplicationCommand(arguments: [String]) throws -> ActivateApplicationCommand {

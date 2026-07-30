@@ -14,6 +14,7 @@ brrainztools ax --app Terminal tree --depth 2
 brrainztools menu --app Drafty list
 brrainztools ascii /tmp/screenshot.png --ocr-only
 brrainztools displays
+brrainztools reveal ./README.md
 ```
 
 ## Output
@@ -55,6 +56,16 @@ brrainztools clipboard --set "copied text"
 
 `clipboard` reads or sets plain text on the general pasteboard and returns the
 clipboard payload as `data`.
+
+## Reveal In Finder
+
+```bash
+brrainztools reveal PATH
+```
+
+`reveal` resolves relative paths and `~`, opens Finder, and selects the file or
+directory at the resolved path. The command returns that absolute path as
+`data.path`. A missing target exits with code 66 and a `pathNotFound` error.
 
 ## App Lifecycle
 

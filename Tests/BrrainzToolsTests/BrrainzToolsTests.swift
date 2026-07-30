@@ -274,6 +274,97 @@ final class BrrainzToolsTests: XCTestCase {
         }
     }
 
+    func testRevealParsing() throws {
+        let behavior = try parse(arguments: ["reveal", "./README.md"])
+
+        guard case .revealFile(let command) = behavior else {
+            return XCTFail("Expected reveal-file behavior.")
+        }
+
+        XCTAssertEqual(command.path, "./README.md")
+    }
+
+    func testRevealHelpParsing() throws {
+        for arguments in [
+            ["reveal", "--help"],
+            ["reveal", "-h"],
+        ] {
+            let behavior = try parse(arguments: arguments)
+            guard case .showHelpText(let text) = behavior else {
+                return XCTFail("Expected reveal help for \(arguments).")
+            }
+
+            XCTAssertTrue(text.contains("brrainztools reveal PATH"))
+        }
+    }
+
+    func testRevealParsingRejectsMissingEmptyOrMultiplePaths() {
+        for arguments in [
+            ["reveal"],
+            ["reveal", ""],
+            ["reveal", "one", "two"],
+        ] {
+            XCTAssertThrowsError(
+                try parse(arguments: arguments)
+            ) { error in
+                XCTAssertTrue(String(describing: error).contains("reveal"))
+                XCTAssertTrue(String(describing: error).contains("PATH"))
+            }
+        }
+    }
+
+    func testRevealResolvesRelativePathAndRequestsFinderSelection() throws {
+        let expectedURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("docs/usage.md")
+            .standardizedFileURL
+        var existenceCheckPath: String?
+        var revealedURLs: [URL] = []
+
+        let json = try reveal(
+            using: RevealCommand(path: "docs/usage.md"),
+            fileExists: {
+                existenceCheckPath = $0
+                return true
+            },
+            revealURLs: {
+                revealedURLs = $0
+            }
+        )
+
+        XCTAssertEqual(existenceCheckPath, expectedURL.path)
+        XCTAssertEqual(revealedURLs, [expectedURL])
+        XCTAssertEqual(json, try encodeJSON(RevealResponse(path: expectedURL.path)))
+    }
+
+    func testRevealRejectsMissingPathBeforeRequestingFinderSelection() {
+        let rawPath = "~/missing-brrainztools-test-file"
+        let expectedPath = (rawPath as NSString).expandingTildeInPath
+        var existenceCheckPath: String?
+        var revealWasRequested = false
+
+        XCTAssertThrowsError(
+            try reveal(
+                using: RevealCommand(path: rawPath),
+                fileExists: {
+                    existenceCheckPath = $0
+                    return false
+                },
+                revealURLs: { _ in revealWasRequested = true }
+            )
+        ) { error in
+            guard let error = error as? BrrainzToolsError else {
+                return XCTFail("Expected BrrainzToolsError.")
+            }
+
+            XCTAssertEqual(error.kind, "pathNotFound")
+            XCTAssertEqual(error.exitCode, 66)
+            XCTAssertTrue(error.localizedDescription.contains("missing-brrainztools-test-file"))
+        }
+
+        XCTAssertEqual(existenceCheckPath, expectedPath)
+        XCTAssertFalse(revealWasRequested)
+    }
+
     func testActivateApplicationParsing() throws {
         let behavior = try parse(arguments: ["activate", "--app", "Terminal"])
 
@@ -625,6 +716,7 @@ final class BrrainzToolsTests: XCTestCase {
 
     func testOperationalCommandsSynchronizeAgentSupport() throws {
         XCTAssertTrue(try parse(arguments: ["--find-app", "RimWorld"]).shouldSynchronizeAgentSupport)
+        XCTAssertTrue(try parse(arguments: ["reveal", "./README.md"]).shouldSynchronizeAgentSupport)
         XCTAssertTrue(try parse(arguments: ["activate", "--app", "Terminal"]).shouldSynchronizeAgentSupport)
         XCTAssertTrue(try parse(arguments: ["quit", "--app", "Terminal"]).shouldSynchronizeAgentSupport)
     }
@@ -2025,6 +2117,7 @@ final class BrrainzToolsTests: XCTestCase {
             (.ambiguousWindow("two windows"), 65),
             (.applicationNotFound("missing app"), 66),
             (.windowNotFound("missing window"), 66),
+            (.pathNotFound("missing path"), 66),
             (.capturePermissionDenied, 69),
             (.accessibilityPermissionDenied, 69),
             (.launchFailed("launch failed"), 70),

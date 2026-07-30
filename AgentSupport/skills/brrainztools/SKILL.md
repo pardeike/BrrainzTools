@@ -17,6 +17,7 @@ Prefer it over raw `screencapture`, generic screenshots, System Events AppleScri
 - inspect Accessibility trees and state with `brrainztools ax --app APP tree|get|wait-for-element`, including `value`, `enabled`, `focused`, `selected`, stable `path` selectors, `--interactive`, `--flat`, `--depth`, `--max-children`, and `--roles`
 - act on UI with `brrainztools ax --app APP press|set-value|type|key|click|drag|scroll`, including selector-targeted scrolling such as `scroll 0,-800 --path 0.3.1`
 - launch, activate, quit (including `quit --wait` for deterministic relaunches), wait for windows/elements, move/resize/raise/close/minimize windows, and read/set clipboard text
+- reveal a file or directory as a Finder selection with `brrainztools reveal PATH`
 - check permissions without prompting with `brrainztools doctor`, and add `--no-prompt` to Accessibility/menu/waiting commands when unattended behavior matters
 
 It is designed for agent use and may already be authorized for local screen capture and Accessibility workflows.
