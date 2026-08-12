@@ -14,6 +14,7 @@ brrainztools ax --app Terminal tree --depth 2
 brrainztools menu --app Drafty list
 brrainztools ascii /tmp/screenshot.png --ocr-only
 brrainztools displays
+brrainztools open-file ./README.md
 brrainztools reveal ./README.md
 ```
 
@@ -66,6 +67,30 @@ brrainztools reveal PATH
 `reveal` resolves relative paths and `~`, opens Finder, and selects the file or
 directory at the resolved path. The command returns that absolute path as
 `data.path`. A missing target exits with code 66 and a `pathNotFound` error.
+
+## Open A Document
+
+```bash
+brrainztools open-file PATH
+brrainztools open-file PATH --app APP_PATH_OR_BUNDLE_ID
+brrainztools open-file PATH --app /tmp/MarkReview.app --wait-window --timeout 10
+```
+
+`open-file` performs macOS's document-open handoff. This is different from
+passing a file path as a process argument to `launch`: document apps such as a
+SwiftUI `DocumentGroup` receive the file through Launch Services. Without
+`--app`, macOS uses the document's default associated app. With `--app`, the
+value must be an app bundle path or bundle id.
+
+Relative paths and `~` are resolved before the handoff. Add `--wait-window` to
+wait for the handling process's first Accessibility window; `--no-prompt` and
+`--timeout SECONDS` behave as they do for `launch`. The response includes the
+absolute document path, selected app target and resolution method, handling
+application, and any waited-for window. A missing document exits with code 66
+and `pathNotFound`; a directory or failed handoff exits with code 70 and
+`openFailed`.
+
+The compatibility form `brrainztools --open-file PATH ...` is also accepted.
 
 ## App Lifecycle
 

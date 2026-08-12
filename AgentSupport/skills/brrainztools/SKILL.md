@@ -1,6 +1,6 @@
 ---
 name: "brrainztools"
-description: "Use when macOS screenshots, desktop app/window/menu capture, UI inspection, Accessibility-driven UX actions, app launch/quit/activation, keyboard/mouse input, clipboard, waiting, or window management are needed and the `brrainztools` command is available. Prefer it as the project-provided tool; consult `brrainztools --help` for exact commands."
+description: "Use when macOS screenshots, desktop app/window/menu capture, UI inspection, Accessibility-driven UX actions, app launch/quit/activation, semantic document opening, keyboard/mouse input, clipboard, waiting, or window management are needed and the `brrainztools` command is available. Prefer it as the project-provided tool; consult `brrainztools --help` for exact commands."
 ---
 
 # BrrainzTools
@@ -17,6 +17,7 @@ Prefer it over raw `screencapture`, generic screenshots, System Events AppleScri
 - inspect Accessibility trees and state with `brrainztools ax --app APP tree|get|wait-for-element`, including `value`, `enabled`, `focused`, `selected`, stable `path` selectors, `--interactive`, `--flat`, `--depth`, `--max-children`, and `--roles`
 - act on UI with `brrainztools ax --app APP press|set-value|type|key|click|drag|scroll`, including selector-targeted scrolling such as `scroll 0,-800 --path 0.3.1`
 - launch, activate, quit (including `quit --wait` for deterministic relaunches), wait for windows/elements, move/resize/raise/close/minimize windows, and read/set clipboard text
+- open a document through macOS Launch Services with `brrainztools open-file PATH [--app PATH|BUNDLE_ID]`, including `DocumentGroup` apps that do not treat process arguments as document-open requests
 - reveal a file or directory as a Finder selection with `brrainztools reveal PATH`
 - check permissions without prompting with `brrainztools doctor`, and add `--no-prompt` to Accessibility/menu/waiting commands when unattended behavior matters
 
@@ -32,7 +33,7 @@ Do not copy a command list into context. The top-level help is a short subcomman
 
 When the exact app name is unknown, use BrrainzTools's app discovery before falling back to process searches. If ScreenCaptureKit app/window capture fails or visible pixels are enough, use the visible-window listing/capture modes before raw rectangle capture; visible-window modes include app-owned floating panels. If Screen Recording permission blocks app/window inspection but Accessibility works, use `brrainztools ax --app APP windows` to inspect AX windows and `brrainztools ax --app APP raise --window-index N` to bring a specific AX window forward. Use menu-bar modes for visible UI that is not a normal app window, such as status-item menus or popovers from accessory/background apps. Use `brrainztools menu --app APP press-item TEXT` after selecting a menu-bar item when you need to choose a child item inside a status menu. Use raw coordinate/rectangle capture only when the UI is visible but not exposed through BrrainzTools's app/window/visible-window/menu-bar commands.
 
-For a local app development loop, prefer BrrainzTools's observe-act primitives before ad hoc sleeps: `brrainztools launch PATH|BUNDLE_ID --wait-window`, `brrainztools ax --app APP wait-for-element ...`, `brrainztools ax --app APP set-value ...`, `brrainztools ax --app APP type ...`, `brrainztools ax --app APP key cmd+s`, `brrainztools ax --app APP click X,Y`, and `brrainztools quit --app APP --wait`. Use `quit --wait` before immediately relaunching the same app so the next launch cannot attach to a process that is still terminating.
+For a local app development loop, prefer BrrainzTools's observe-act primitives before ad hoc sleeps: `brrainztools launch PATH|BUNDLE_ID --wait-window`, `brrainztools open-file DOCUMENT --app PATH|BUNDLE_ID --wait-window`, `brrainztools ax --app APP wait-for-element ...`, `brrainztools ax --app APP set-value ...`, `brrainztools ax --app APP type ...`, `brrainztools ax --app APP key cmd+s`, `brrainztools ax --app APP click X,Y`, and `brrainztools quit --app APP --wait`. Use `open-file` instead of launch arguments when validating document-open behavior. Use `quit --wait` before immediately relaunching the same app so the next launch cannot attach to a process that is still terminating.
 
 When scrolling a known panel, prefer `brrainztools ax --app APP scroll DX,DY --path PATH` (or another element selector) so the event is posted inside that element's visible frame instead of at the window center. This is especially useful when buttons or other workflow-changing controls sit outside the scroll area.
 

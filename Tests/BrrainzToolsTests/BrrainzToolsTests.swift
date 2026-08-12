@@ -365,6 +365,161 @@ final class BrrainzToolsTests: XCTestCase {
         XCTAssertFalse(revealWasRequested)
     }
 
+    func testOpenFileParsingUsesDefaultApplication() throws {
+        let behavior = try parse(arguments: ["open-file", "./README.md"])
+
+        guard case .openFile(let command) = behavior else {
+            return XCTFail("Expected open-file behavior.")
+        }
+
+        XCTAssertEqual(command.path, "./README.md")
+        XCTAssertNil(command.applicationTarget)
+        XCTAssertFalse(command.waitForWindow)
+        XCTAssertTrue(command.promptForAccessibility)
+        XCTAssertEqual(command.timeout, 5.0, accuracy: 0.001)
+    }
+
+    func testOpenFileParsingSupportsTargetedAppAndWait() throws {
+        let behavior = try parse(arguments: [
+            "--open-file",
+            "~/Documents/Review.markreview",
+            "--app", "/tmp/MarkReview.app",
+            "--wait-window",
+            "--no-prompt",
+            "--timeout", "2.5",
+        ])
+
+        guard case .openFile(let command) = behavior else {
+            return XCTFail("Expected open-file behavior.")
+        }
+
+        XCTAssertEqual(command.path, "~/Documents/Review.markreview")
+        XCTAssertEqual(command.applicationTarget, .path("/tmp/MarkReview.app"))
+        XCTAssertTrue(command.waitForWindow)
+        XCTAssertFalse(command.promptForAccessibility)
+        XCTAssertEqual(command.timeout, 2.5, accuracy: 0.001)
+    }
+
+    func testOpenFileHelpParsing() throws {
+        for arguments in [
+            ["open-file", "--help"],
+            ["open-file", "-h"],
+            ["--open-file", "--help"],
+        ] {
+            let behavior = try parse(arguments: arguments)
+            guard case .showHelpText(let text) = behavior else {
+                return XCTFail("Expected open-file help for \(arguments).")
+            }
+
+            XCTAssertTrue(text.contains("brrainztools open-file PATH"))
+            XCTAssertTrue(text.contains("--app PATH|BUNDLE_ID"))
+        }
+    }
+
+    func testOpenFileParsingRejectsIncompleteOrConflictingArguments() {
+        for arguments in [
+            ["open-file"],
+            ["open-file", ""],
+            ["open-file", "one", "two"],
+            ["open-file", "document.md", "--app"],
+            ["open-file", "document.md", "--app", "--wait-window"],
+            ["open-file", "document.md", "--app", "One.app", "--app", "Two.app"],
+            ["open-file", "document.md", "--no-prompt"],
+        ] {
+            XCTAssertThrowsError(
+                try parse(arguments: arguments)
+            ) { error in
+                XCTAssertTrue(String(describing: error).contains("open-file"))
+            }
+        }
+    }
+
+    func testOpenFileResolvesPathAndRequestsDocumentHandoff() throws {
+        let expectedURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("docs/usage.md")
+            .standardizedFileURL
+        let target = LaunchTarget.path("/tmp/Test Document App.app")
+        var statusPath: String?
+        var openedURL: URL?
+        var openedTarget: LaunchTarget?
+
+        let json = try openFile(
+            using: OpenFileCommand(
+                path: "docs/usage.md",
+                applicationTarget: target,
+                waitForWindow: false,
+                promptForAccessibility: true,
+                timeout: 5
+            ),
+            pathStatus: {
+                statusPath = $0
+                return (true, false)
+            },
+            openDocument: { url, applicationTarget in
+                openedURL = url
+                openedTarget = applicationTarget
+                return (
+                    AutomationApplication(
+                        name: "Test Document App",
+                        bundleIdentifier: "com.example.document-app",
+                        processID: 321
+                    ),
+                    "applicationBundle"
+                )
+            }
+        )
+
+        XCTAssertEqual(statusPath, expectedURL.path)
+        XCTAssertEqual(openedURL, expectedURL)
+        XCTAssertEqual(openedTarget, target)
+
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(object["path"] as? String, expectedURL.path)
+        XCTAssertEqual(object["applicationTarget"] as? String, "/tmp/Test Document App.app")
+        XCTAssertEqual(object["method"] as? String, "applicationBundle")
+        XCTAssertEqual(object["waitForWindow"] as? Bool, false)
+        let application = try XCTUnwrap(object["application"] as? [String: Any])
+        XCTAssertEqual(application["name"] as? String, "Test Document App")
+        XCTAssertEqual(application["bundleIdentifier"] as? String, "com.example.document-app")
+        XCTAssertEqual(application["processID"] as? Int, 321)
+    }
+
+    func testOpenFileRejectsMissingPathOrDirectoryBeforeHandoff() {
+        for status in [(false, false), (true, true)] {
+            var openWasRequested = false
+
+            XCTAssertThrowsError(
+                try openFile(
+                    using: OpenFileCommand(
+                        path: "missing-or-directory.md",
+                        applicationTarget: nil,
+                        waitForWindow: false,
+                        promptForAccessibility: true,
+                        timeout: 5
+                    ),
+                    pathStatus: { _ in status },
+                    openDocument: { _, _ in
+                        openWasRequested = true
+                        return (
+                            AutomationApplication(name: "Unexpected", bundleIdentifier: "", processID: 1),
+                            "defaultApplication"
+                        )
+                    }
+                )
+            ) { error in
+                guard let error = error as? BrrainzToolsError else {
+                    return XCTFail("Expected BrrainzToolsError.")
+                }
+
+                XCTAssertEqual(error.kind, status.0 ? "openFailed" : "pathNotFound")
+                XCTAssertEqual(error.exitCode, status.0 ? 70 : 66)
+            }
+
+            XCTAssertFalse(openWasRequested)
+        }
+    }
+
     func testActivateApplicationParsing() throws {
         let behavior = try parse(arguments: ["activate", "--app", "Terminal"])
 
@@ -717,6 +872,7 @@ final class BrrainzToolsTests: XCTestCase {
     func testOperationalCommandsSynchronizeAgentSupport() throws {
         XCTAssertTrue(try parse(arguments: ["--find-app", "RimWorld"]).shouldSynchronizeAgentSupport)
         XCTAssertTrue(try parse(arguments: ["reveal", "./README.md"]).shouldSynchronizeAgentSupport)
+        XCTAssertTrue(try parse(arguments: ["open-file", "./README.md"]).shouldSynchronizeAgentSupport)
         XCTAssertTrue(try parse(arguments: ["activate", "--app", "Terminal"]).shouldSynchronizeAgentSupport)
         XCTAssertTrue(try parse(arguments: ["quit", "--app", "Terminal"]).shouldSynchronizeAgentSupport)
     }
@@ -2120,6 +2276,7 @@ final class BrrainzToolsTests: XCTestCase {
             (.pathNotFound("missing path"), 66),
             (.capturePermissionDenied, 69),
             (.accessibilityPermissionDenied, 69),
+            (.openFailed("open failed"), 70),
             (.launchFailed("launch failed"), 70),
             (.captureFailed("capture failed"), 70),
             (.accessibilityQueryFailed("query failed"), 70),

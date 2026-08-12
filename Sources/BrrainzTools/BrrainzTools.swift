@@ -34,6 +34,9 @@ struct BrrainzTools {
             case .revealFile(let command):
                 let json = try reveal(using: command)
                 print(try dataEnvelopeJSON(mode: "reveal", dataJSON: json))
+            case .openFile(let command):
+                let json = try openFile(using: command)
+                print(try dataEnvelopeJSON(mode: "open-file", dataJSON: json))
             case .listDisplays:
                 let json = try listDisplays()
                 print(try dataEnvelopeJSON(mode: "displays", dataJSON: json))
@@ -132,6 +135,7 @@ enum CommandBehavior: Sendable {
     case doctor
     case clipboard(ClipboardCommand)
     case revealFile(RevealCommand)
+    case openFile(OpenFileCommand)
     case listDisplays
     case activateApplication(ActivateApplicationCommand)
     case launchApplication(LaunchApplicationCommand)
@@ -149,7 +153,7 @@ enum CommandBehavior: Sendable {
         switch self {
         case .showHelp, .showHelpText, .showVersion, .doctor, .clipboard, .listDisplays:
             return false
-        case .revealFile, .activateApplication, .launchApplication, .quitApplication, .findApps, .asciiArt, .capture, .captureVisibleWindow, .listWindows, .listVisibleWindows, .inspectAccessibility, .menuBar:
+        case .revealFile, .openFile, .activateApplication, .launchApplication, .quitApplication, .findApps, .asciiArt, .capture, .captureVisibleWindow, .listWindows, .listVisibleWindows, .inspectAccessibility, .menuBar:
             return true
         }
     }
@@ -202,6 +206,14 @@ struct ClipboardCommand: Sendable {
 
 struct RevealCommand: Sendable {
     let path: String
+}
+
+struct OpenFileCommand: Sendable {
+    let path: String
+    let applicationTarget: LaunchTarget?
+    let waitForWindow: Bool
+    let promptForAccessibility: Bool
+    let timeout: TimeInterval
 }
 
 struct AsciiArtCommand: Sendable {
@@ -735,6 +747,15 @@ struct RevealResponse: Encodable {
     let path: String
 }
 
+private struct OpenFileResponse: Encodable {
+    let path: String
+    let applicationTarget: String?
+    let method: String
+    let application: WindowListApplication
+    let waitForWindow: Bool
+    let window: AccessibilityWindowEntry?
+}
+
 struct DisplayListResponse: Encodable {
     let displays: [DisplayEntry]
 }
@@ -1257,6 +1278,7 @@ enum BrrainzToolsError: LocalizedError, Sendable {
     case windowNotFound(String)
     case ambiguousWindow(String)
     case pathNotFound(String)
+    case openFailed(String)
     case launchFailed(String)
     case captureFailed(String)
     case operationTimedOut(String)
@@ -1285,6 +1307,8 @@ enum BrrainzToolsError: LocalizedError, Sendable {
             return "ambiguousWindow"
         case .pathNotFound:
             return "pathNotFound"
+        case .openFailed:
+            return "openFailed"
         case .launchFailed:
             return "launchFailed"
         case .captureFailed:
@@ -1320,6 +1344,8 @@ enum BrrainzToolsError: LocalizedError, Sendable {
             return message
         case .pathNotFound(let message):
             return message
+        case .openFailed(let message):
+            return message
         case .launchFailed(let message):
             return message
         case .captureFailed(let message):
@@ -1343,7 +1369,7 @@ enum BrrainzToolsError: LocalizedError, Sendable {
             return 66
         case .capturePermissionDenied, .accessibilityPermissionDenied:
             return 69
-        case .launchFailed, .captureFailed, .accessibilityQueryFailed, .encodeFailed:
+        case .openFailed, .launchFailed, .captureFailed, .accessibilityQueryFailed, .encodeFailed:
             return 70
         case .operationTimedOut:
             return 75
@@ -1380,6 +1406,7 @@ Subcommands:
   ax        AX tree/get/press/input/window actions
   menu      menu-bar list/press/press-item/capture
   ascii     image to ASCII/OCR text
+  open-file open a document through macOS Launch Services
   reveal    select a file or directory in Finder
   displays | doctor | clipboard
   launch | activate | quit
@@ -1533,6 +1560,16 @@ Usage:
 
 Opens Finder and selects the file or directory at PATH. Relative paths and `~`
 are resolved before Finder is asked to reveal the item.
+"""
+
+private let openFileHelpText = """
+Usage:
+  brrainztools open-file PATH [--app PATH|BUNDLE_ID] [--wait-window [--no-prompt]] [--timeout SECONDS]
+  brrainztools --open-file PATH [--app PATH|BUNDLE_ID] [--wait-window [--no-prompt]] [--timeout SECONDS]
+
+Asks macOS to open PATH as a document, using its default app unless `--app`
+specifies an app bundle path or bundle id. `--wait-window` waits for the app's
+first Accessibility window.
 """
 
 private let launchHelpText = """
@@ -1783,6 +1820,55 @@ func reveal(
     return try encodeJSON(RevealResponse(path: url.path))
 }
 
+func openFile(
+    using command: OpenFileCommand,
+    pathStatus: (String) -> (exists: Bool, isDirectory: Bool) = { path in
+        var isDirectory = ObjCBool(false)
+        let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+        return (exists, isDirectory.boolValue)
+    },
+    openDocument: (URL, LaunchTarget?) throws -> (application: AutomationApplication, method: String) = { url, target in
+        let opened = try openDocument(at: url, with: target)
+        return (opened.application, opened.method)
+    }
+) throws -> String {
+    let url = fileURL(from: command.path)
+    let status = pathStatus(url.path)
+
+    guard status.exists else {
+        throw BrrainzToolsError.pathNotFound("No file exists at `\(url.path)`.")
+    }
+
+    guard !status.isDirectory else {
+        throw BrrainzToolsError.openFailed("Open-file path `\(url.path)` is a directory, not a document.")
+    }
+
+    let opened = try openDocument(url, command.applicationTarget)
+    let waitedWindow: AccessibilityWindowEntry?
+
+    if command.waitForWindow {
+        try ensureAccessibilityAccess(prompt: command.promptForAccessibility)
+        let waited = try waitForAnyAccessibilityWindow(
+            selector: .processID(opened.application.processID),
+            timeout: command.timeout
+        )
+        waitedWindow = accessibilityWindowEntry(for: waited.window)
+    } else {
+        waitedWindow = nil
+    }
+
+    return try encodeJSON(
+        OpenFileResponse(
+            path: url.path,
+            applicationTarget: command.applicationTarget?.rawValue,
+            method: opened.method,
+            application: windowListApplication(for: opened.application),
+            waitForWindow: command.waitForWindow,
+            window: waitedWindow
+        )
+    )
+}
+
 func listDisplays() throws -> String {
     try encodeJSON(DisplayListResponse(displays: currentDisplayEntries()))
 }
@@ -1959,6 +2045,84 @@ private func launchApplication(target: LaunchTarget, arguments: [String]) throws
             AutomationApplication(name: url.lastPathComponent, bundleIdentifier: "", processID: processID)
 
         return LaunchedApplication(application: application, method: "executable")
+    }
+}
+
+private func openDocument(at documentURL: URL, with applicationTarget: LaunchTarget?) throws -> LaunchedApplication {
+    let configuration = NSWorkspace.OpenConfiguration()
+    let result = OpenApplicationResult()
+    let semaphore = DispatchSemaphore(value: 0)
+    let method: String
+
+    if let applicationTarget {
+        let resolved = try resolveApplicationURL(for: applicationTarget)
+        method = resolved.method
+        NSWorkspace.shared.open(
+            [documentURL],
+            withApplicationAt: resolved.url,
+            configuration: configuration
+        ) { application, error in
+            result.application = application
+            result.error = error
+            semaphore.signal()
+        }
+    } else {
+        method = "defaultApplication"
+        NSWorkspace.shared.open(documentURL, configuration: configuration) { application, error in
+            result.application = application
+            result.error = error
+            semaphore.signal()
+        }
+    }
+
+    guard semaphore.wait(timeout: .now() + 10) == .success else {
+        throw BrrainzToolsError.operationTimedOut(
+            "macOS did not return open status for `\(documentURL.path)` within 10 seconds."
+        )
+    }
+
+    if let error = result.error {
+        throw BrrainzToolsError.openFailed(
+            "Failed to open `\(documentURL.path)`: \(error.localizedDescription)"
+        )
+    }
+
+    guard let application = result.application else {
+        throw BrrainzToolsError.openFailed(
+            "macOS did not return the application handling `\(documentURL.path)`."
+        )
+    }
+
+    return LaunchedApplication(
+        application: automationApplication(from: application),
+        method: method
+    )
+}
+
+private func resolveApplicationURL(for target: LaunchTarget) throws -> (url: URL, method: String) {
+    switch target {
+    case .bundleIdentifier(let bundleIdentifier):
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
+            throw BrrainzToolsError.applicationNotFound(
+                "No application bundle matches bundle id `\(bundleIdentifier)`."
+            )
+        }
+        return (url, "bundleIdentifier")
+
+    case .path(let path):
+        let url = fileURL(from: path)
+        var isDirectory = ObjCBool(false)
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            throw BrrainzToolsError.applicationNotFound(
+                "No application bundle exists at `\(url.path)`."
+            )
+        }
+        guard isDirectory.boolValue, url.pathExtension.lowercased() == "app" else {
+            throw BrrainzToolsError.openFailed(
+                "Open-file app path `\(url.path)` is not an app bundle."
+            )
+        }
+        return (url, "applicationBundle")
     }
 }
 
@@ -2447,6 +2611,13 @@ func parse(arguments: [String]) throws -> CommandBehavior {
 
     if arguments.first == "reveal" {
         return .revealFile(try parseRevealCommand(arguments: Array(arguments.dropFirst())))
+    }
+
+    if arguments.first == "open-file" || arguments.first == "--open-file" {
+        if isHelpRequest(Array(arguments.dropFirst())) {
+            return .showHelpText(openFileHelpText)
+        }
+        return .openFile(try parseOpenFileCommand(arguments: Array(arguments.dropFirst())))
     }
 
     if arguments.first == "activate" {
@@ -3164,6 +3335,8 @@ private func parseSubcommand(arguments: [String]) throws -> CommandBehavior? {
         return isHelpRequest(trailingArguments) ? .showHelpText(clipboardHelpText) : nil
     case "reveal":
         return isHelpRequest(trailingArguments) ? .showHelpText(revealHelpText) : nil
+    case "open-file":
+        return isHelpRequest(trailingArguments) ? .showHelpText(openFileHelpText) : nil
     case "launch":
         return isHelpRequest(trailingArguments) ? .showHelpText(launchHelpText) : nil
     case "activate":
@@ -3535,6 +3708,77 @@ func parseRevealCommand(arguments: [String]) throws -> RevealCommand {
     }
 
     return RevealCommand(path: path)
+}
+
+func parseOpenFileCommand(arguments: [String]) throws -> OpenFileCommand {
+    var path: String?
+    var applicationTarget: LaunchTarget?
+    var waitForWindow = false
+    var promptForAccessibility = true
+    var timeout = defaultScreenCaptureKitTimeout
+    var index = 0
+
+    while index < arguments.count {
+        let argument = arguments[index]
+
+        switch argument {
+        case "--app":
+            let valueIndex = index + 1
+            guard valueIndex < arguments.count,
+                  !arguments[valueIndex].hasPrefix("--"),
+                  let value = normalizedArgumentValue(arguments[valueIndex]) else {
+                throw BrrainzToolsError.invalidArguments("`open-file --app` requires an app bundle PATH or BUNDLE_ID.")
+            }
+            guard applicationTarget == nil else {
+                throw BrrainzToolsError.invalidArguments("`open-file` accepts only one `--app PATH|BUNDLE_ID` target.")
+            }
+            applicationTarget = inferLaunchTarget(value)
+            index += 2
+        case "--wait-window":
+            waitForWindow = true
+            index += 1
+        case "--no-prompt":
+            promptForAccessibility = false
+            index += 1
+        case "--timeout":
+            let valueIndex = index + 1
+            guard valueIndex < arguments.count else {
+                throw BrrainzToolsError.invalidArguments("Missing value for --timeout.")
+            }
+            timeout = try parseTimeout(arguments[valueIndex])
+            index += 2
+        default:
+            if argument.hasPrefix("--") {
+                throw BrrainzToolsError.invalidArguments(
+                    "`open-file` accepts PATH, optional `--app PATH|BUNDLE_ID`, optional `--wait-window`, optional `--no-prompt`, and optional `--timeout SECONDS`."
+                )
+            }
+
+            guard path == nil else {
+                throw BrrainzToolsError.invalidArguments("`open-file` accepts exactly one document PATH.")
+            }
+            path = argument
+            index += 1
+        }
+    }
+
+    guard let rawPath = path, let normalizedPath = normalizedArgumentValue(rawPath) else {
+        throw BrrainzToolsError.invalidArguments("`open-file` requires a document PATH.")
+    }
+
+    if !promptForAccessibility, !waitForWindow {
+        throw BrrainzToolsError.invalidArguments(
+            "`open-file --no-prompt` requires `--wait-window`; opening without waiting does not use Accessibility."
+        )
+    }
+
+    return OpenFileCommand(
+        path: normalizedPath,
+        applicationTarget: applicationTarget,
+        waitForWindow: waitForWindow,
+        promptForAccessibility: promptForAccessibility,
+        timeout: timeout
+    )
 }
 
 func parseActivateApplicationCommand(arguments: [String]) throws -> ActivateApplicationCommand {
