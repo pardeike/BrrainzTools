@@ -12,6 +12,7 @@ brrainztools apps Terminal
 brrainztools windows --app Terminal --visible
 brrainztools ax --app Terminal tree --depth 2
 brrainztools menu --app Drafty list
+brrainztools menu --app Finder tree
 brrainztools ascii /tmp/screenshot.png --ocr-only
 brrainztools displays
 brrainztools open-file ./README.md
@@ -241,6 +242,8 @@ inside the rectangle, even if other apps are visually in front.
 
 ```bash
 brrainztools --app "Drafty" --list-menu-bar-items
+brrainztools --app Finder --menu-tree
+brrainztools menu --app Finder tree --menu-bar-item View --depth 6 --max-children 80
 brrainztools --app "Drafty" --capture-menu
 brrainztools --app "Drafty" --menu-bar-index 0 --capture-menu
 brrainztools --app "Drafty" --menu-bar-index 0 --press-menu-item "Quick Tasks"
@@ -250,9 +253,25 @@ brrainztools --app "Drafty" --menu-bar-item "Drafty" --press-menu-item "Preferen
 Menu-bar modes work with accessibility menu-bar items exposed by the selected
 app. They are useful for status-item apps and menu-like popovers.
 
-If you omit `--menu-bar-index` or `--menu-bar-item`, BrrainzTools selects the
-single status-item entry when exactly one is available. If there are multiple
-candidates, the command fails and prints suggestions.
+`menu tree` (compatibility form: `--menu-tree`) recursively reads the exposed
+hierarchy without opening a menu, pressing an item, or activating the app. Each
+node reports a stable path, role and text metadata, enabled state, menu-item
+checked state and mark, shortcut character/key/glyph/modifier data, available
+actions, child count, and nested children. Unmarked `AXMenuItem` nodes report
+`checked: false`; check state is omitted for roles that are not menu items.
+Unknown shortcut modifier bits remain visible in `modifierMask` and as an
+`unknown:0x...` modifier name.
+
+The command defaults to the bounded maxima: depth 12 and 200 children per node,
+so normal app menus are complete. Use `--depth` (0...12) and `--max-children`
+(1...200) for a smaller diagnostic; truncated nodes report `truncated: true`.
+Add `--menu-bar-index` or `--menu-bar-item` to return one top-level branch
+instead of the entire menu bar.
+
+For press and capture modes, omitting `--menu-bar-index` or `--menu-bar-item`
+selects the single status-item entry when exactly one is available. If there are
+multiple candidates, the command fails and prints suggestions. `menu tree`
+instead returns every top-level branch when no selection is given.
 
 `--press-menu-item TEXT` opens the selected menu-bar item, then presses a child
 menu item by title, description, or identifier.

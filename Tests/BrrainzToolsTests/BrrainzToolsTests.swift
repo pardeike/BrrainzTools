@@ -218,12 +218,92 @@ final class BrrainzToolsTests: XCTestCase {
         XCTAssertEqual(asciiCommand.outputMode, .ocrOnly)
     }
 
+    func testMenuTreeSubcommandParsing() throws {
+        let behavior = try parse(arguments: [
+            "menu",
+            "tree",
+            "--app", "Finder",
+            "--menu-bar-item", "View",
+            "--depth", "7",
+            "--max-children", "80",
+            "--no-prompt",
+        ])
+
+        guard case .menuBar(let command) = behavior else {
+            return XCTFail("Expected menu-bar behavior.")
+        }
+
+        guard case .name(let selection) = command.selection else {
+            return XCTFail("Expected a named menu-bar selection.")
+        }
+        XCTAssertEqual(selection, "View")
+        XCTAssertFalse(command.promptForAccessibility)
+
+        guard case .tree(let options) = command.mode else {
+            return XCTFail("Expected menu-tree mode.")
+        }
+        XCTAssertEqual(options.depth, 7)
+        XCTAssertEqual(options.childLimit, 80)
+        XCTAssertEqual(command.mode.envelopeMode, "menu.tree")
+    }
+
+    func testMenuTreeFlagFirstParsingUsesTreeDefaults() throws {
+        let behavior = try parse(arguments: [
+            "--app", "Finder",
+            "--menu-tree",
+        ])
+
+        guard case .menuBar(let command) = behavior,
+              case .tree(let options) = command.mode
+        else {
+            return XCTFail("Expected menu-tree behavior.")
+        }
+
+        XCTAssertNil(command.selection)
+        XCTAssertEqual(options.depth, 12)
+        XCTAssertEqual(options.childLimit, 200)
+    }
+
+    func testMenuTreeRejectsOutputAndAccessibilityFilters() {
+        XCTAssertThrowsError(
+            try parse(arguments: ["menu", "--app", "Finder", "tree", "--output", "/tmp/tree.json"])
+        ) { error in
+            XCTAssertTrue(String(describing: error).contains("--menu-tree"))
+        }
+
+        XCTAssertThrowsError(
+            try parse(arguments: ["menu", "--app", "Finder", "tree", "--interactive"])
+        ) { error in
+            XCTAssertTrue(String(describing: error).contains("--interactive"))
+        }
+    }
+
     func testMenuSubcommandRejectsUnknownAction() {
         XCTAssertThrowsError(
             try parse(arguments: ["menu", "--app", "Finder", "pres"])
         ) { error in
             XCTAssertTrue(String(describing: error).contains("Unknown `menu` action `pres`"))
         }
+    }
+
+    func testMenuShortcutReportsDefaultAndExplicitModifiers() {
+        XCTAssertEqual(
+            menuShortcut(character: "n", virtualKey: 45, glyph: nil, modifierMask: 0),
+            MenuShortcut(
+                character: "n",
+                virtualKey: 45,
+                glyph: nil,
+                modifierMask: 0,
+                modifiers: ["command"]
+            )
+        )
+        XCTAssertEqual(
+            menuShortcutModifierNames((1 << 0) | (1 << 1) | (1 << 2)),
+            ["control", "option", "shift", "command"]
+        )
+        XCTAssertEqual(menuShortcutModifierNames(1 << 3), [])
+        XCTAssertEqual(menuShortcutModifierNames((1 << 3) | (1 << 4)), ["unknown:0x10"])
+        XCTAssertNil(menuShortcut(character: nil, virtualKey: nil, glyph: nil, modifierMask: 0))
     }
 
     func testDoctorParsing() throws {
@@ -2854,7 +2934,7 @@ final class BrrainzToolsTests: XCTestCase {
             }
         )
 
-        XCTAssertEqual(fallbackVersion, "v2.0.0")
+        XCTAssertEqual(fallbackVersion, "v2.1.0")
         XCTAssertFalse(gitDescribeWasCalled)
     }
 

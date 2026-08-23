@@ -575,6 +575,7 @@ enum AccessibilityMode: Sendable {
 
 enum MenuBarMode: Sendable {
     case listItems
+    case tree(MenuTreeOptions)
     case pressItem
     case pressMenuItem(MenuChildSelection)
     case captureMenu
@@ -583,6 +584,8 @@ enum MenuBarMode: Sendable {
         switch self {
         case .listItems:
             return "menu.items"
+        case .tree:
+            return "menu.tree"
         case .pressItem:
             return "menu.press"
         case .pressMenuItem:
@@ -599,6 +602,11 @@ enum MenuBarMode: Sendable {
 
         return false
     }
+}
+
+struct MenuTreeOptions: Sendable {
+    let depth: Int
+    let childLimit: Int
 }
 
 enum MenuBarSelection: Sendable {
@@ -1107,6 +1115,39 @@ private struct MenuBarListResponse: Encodable {
     let items: [MenuBarItemEntry]
 }
 
+private struct MenuTreeResponse: Encodable {
+    let application: WindowListApplication
+    let items: [MenuTreeNode]
+}
+
+struct MenuTreeNode: Encodable {
+    let path: String
+    let index: Int?
+    let source: String?
+    let role: String?
+    let subrole: String?
+    let title: String?
+    let description: String?
+    let identifier: String?
+    let enabled: Bool?
+    let checked: Bool?
+    let mark: String?
+    let shortcut: MenuShortcut?
+    let frame: JSONRect?
+    let actions: [String]
+    let childCount: Int
+    let truncated: Bool?
+    let children: [MenuTreeNode]?
+}
+
+struct MenuShortcut: Encodable, Equatable {
+    let character: String?
+    let virtualKey: Int?
+    let glyph: Int?
+    let modifierMask: UInt32?
+    let modifiers: [String]?
+}
+
 private struct MenuBarPressResponse: Encodable {
     let application: WindowListApplication
     let item: MenuBarItemEntry
@@ -1392,6 +1433,8 @@ private let defaultAccessibilityTreeDepth = 4
 private let defaultAccessibilityTreeChildLimit = 25
 private let accessibilityTreeDepthRange = 0...12
 private let accessibilityTreeChildLimitRange = 1...200
+private let defaultMenuTreeDepth = accessibilityTreeDepthRange.upperBound
+private let defaultMenuTreeChildLimit = accessibilityTreeChildLimitRange.upperBound
 
 private let usageText = """
 brrainztools = macOS desktop automation, inspection, and capture tool for agents and scripts.
@@ -1404,7 +1447,7 @@ Subcommands:
   apps      find running apps
   windows   list ScreenCaptureKit, visible, or AX windows
   ax        AX tree/get/press/input/window actions
-  menu      menu-bar list/press/press-item/capture
+  menu      menu-bar list/tree/press/press-item/capture
   ascii     image to ASCII/OCR text
   open-file open a document through macOS Launch Services
   reveal    select a file or directory in Finder
@@ -1498,6 +1541,7 @@ Element selectors apply to get, wait-for-element, set-value, scroll, and press.
 private let menuHelpText = """
 Usage:
   brrainztools menu --app APP list
+  brrainztools menu --app APP tree [--depth N] [--max-children N] [--menu-bar-index N | --menu-bar-item TEXT]
   brrainztools menu --app APP press [--menu-bar-index N | --menu-bar-item TEXT]
   brrainztools menu --app APP press-item TEXT [--menu-bar-index N | --menu-bar-item TEXT]
   brrainztools menu --app APP capture [--menu-bar-index N | --menu-bar-item TEXT] [capture options]
@@ -1511,6 +1555,9 @@ Capture options:
   --with-ascii | --with-ocr
   --raw
   --no-prompt
+
+`tree` recursively inspects the exposed menu hierarchy without opening menus,
+pressing items, or activating the selected app.
 """
 
 private let asciiHelpText = """
@@ -1608,7 +1655,7 @@ private let agentSupportDebugEnvironmentKey = "BRRAINZTOOLS_DEBUG_AGENT_SYNC"
 private let legacyAgentSupportSkillName = "regionshot"
 private let legacyManagedAgentInstructionsStartMarker = "<!-- regionshot-managed:start -->"
 private let legacyManagedAgentInstructionsEndMarker = "<!-- regionshot-managed:end -->"
-private let brrainzToolsFallbackVersion = "v2.0.0"
+private let brrainzToolsFallbackVersion = "v2.1.0"
 private let brrainzToolsVersionEnvironmentKey = "BRRAINZTOOLS_VERSION"
 private let brrainzToolsSupportDirectoryName = ".brrainztools-support"
 private let brrainzToolsSupportVersionFilename = "VERSION"
@@ -2672,6 +2719,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     let wantsVisibleWindowList = parsed.flags.contains("--list-visible-windows")
     let wantsVisibleWindowCapture = parsed.flags.contains("--visible-window")
     let wantsMenuBarList = parsed.flags.contains("--list-menu-bar-items")
+    let wantsMenuBarTree = parsed.flags.contains("--menu-tree")
     let wantsCaptureMenu = parsed.flags.contains("--capture-menu")
     let pressMenuItemQuery = normalizedArgumentValue(parsed.values["--press-menu-item"])
     let menuBarSelection = try parseMenuBarSelection(parsed)
@@ -2870,13 +2918,14 @@ func parse(arguments: [String]) throws -> CommandBehavior {
 
     let menuBarModeCount = [
         wantsMenuBarList ? 1 : 0,
+        wantsMenuBarTree ? 1 : 0,
         wantsMenuBarPress ? 1 : 0,
         pressMenuItemQuery != nil ? 1 : 0,
         wantsCaptureMenu ? 1 : 0,
     ].reduce(0, +)
 
     if menuBarModeCount > 1 {
-        throw BrrainzToolsError.invalidArguments("Choose only one of `--list-menu-bar-items`, menu-bar `--press`, or `--capture-menu`.")
+        throw BrrainzToolsError.invalidArguments("Choose only one of `--list-menu-bar-items`, `--menu-tree`, menu-bar `--press`, `--press-menu-item`, or `--capture-menu`.")
     }
 
     let visibleWindowModeCount = [
@@ -2940,6 +2989,13 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     let menuBarMode: MenuBarMode?
     if wantsMenuBarList {
         menuBarMode = .listItems
+    } else if wantsMenuBarTree {
+        menuBarMode = .tree(
+            MenuTreeOptions(
+                depth: parsed.values["--depth"] == nil ? defaultMenuTreeDepth : elementTreeDepth,
+                childLimit: parsed.values["--max-children"] == nil ? defaultMenuTreeChildLimit : elementTreeChildLimit
+            )
+        )
     } else if wantsMenuBarPress {
         menuBarMode = .pressItem
     } else if let pressMenuItemQuery {
@@ -3061,13 +3117,21 @@ func parse(arguments: [String]) throws -> CommandBehavior {
         throw BrrainzToolsError.invalidArguments("`--type` and `--key` cannot be combined with `--frontmost-window`, `--window-index`, or `--window-name`; keyboard input is posted to the selected app.")
     }
 
-    let hasElementTreeOption = parsed.values["--depth"] != nil ||
-        parsed.values["--max-children"] != nil ||
-        parsed.values["--roles"] != nil ||
+    let hasTreeBoundsOption = parsed.values["--depth"] != nil ||
+        parsed.values["--max-children"] != nil
+    let hasElementTreeFilter = parsed.values["--roles"] != nil ||
         wantsElementTreeInteractiveOnly ||
         wantsElementTreeFlat
-    if hasElementTreeOption, !wantsElementList {
-        throw BrrainzToolsError.invalidArguments("`--depth`, `--max-children`, `--roles`, `--interactive`, and `--flat` require `--list-elements`.")
+    if
+        (hasTreeBoundsOption || hasElementTreeFilter),
+        !wantsElementList,
+        !wantsMenuBarTree
+    {
+        throw BrrainzToolsError.invalidArguments("`--depth`, `--max-children`, `--roles`, `--interactive`, and `--flat` require `--list-elements`; `menu tree`/`--menu-tree` also accepts `--depth` and `--max-children`.")
+    }
+
+    if hasElementTreeFilter, !wantsElementList {
+        throw BrrainzToolsError.invalidArguments("`--roles`, `--interactive`, and `--flat` require `ax tree` or `--list-elements`.")
     }
 
     if wantsWindowList, windowSelection != nil {
@@ -3150,6 +3214,10 @@ func parse(arguments: [String]) throws -> CommandBehavior {
         throw BrrainzToolsError.invalidArguments("`--list-menu-bar-items` returns JSON data and does not use `--output`.")
     }
 
+    if wantsMenuBarTree, outputPath != nil {
+        throw BrrainzToolsError.invalidArguments("`--menu-tree` returns JSON data and does not use `--output`.")
+    }
+
     if wantsMenuBarPress, outputPath != nil {
         throw BrrainzToolsError.invalidArguments("Menu-bar `--press` returns JSON data and does not use `--output`.")
     }
@@ -3167,7 +3235,7 @@ func parse(arguments: [String]) throws -> CommandBehavior {
     }
 
     if menuBarSelection != nil, menuBarMode == nil {
-        throw BrrainzToolsError.invalidArguments("`--menu-bar-index` and `--menu-bar-item` require menu-bar `--press`, `--press-menu-item`, or `--capture-menu`.")
+        throw BrrainzToolsError.invalidArguments("`--menu-bar-index` and `--menu-bar-item` require `--menu-tree`, menu-bar `--press`, `--press-menu-item`, or `--capture-menu`.")
     }
 
     if accessibilityMode != nil, parsed.region != nil {
@@ -3515,6 +3583,7 @@ private func parseAXSubcommand(arguments: [String]) throws -> CommandBehavior {
 private func parseMenuSubcommand(arguments: [String]) throws -> CommandBehavior {
     let flagActions = [
         "list": "--list-menu-bar-items",
+        "tree": "--menu-tree",
         "press": "--menu-bar-press",
         "capture": "--capture-menu",
     ]
@@ -3666,7 +3735,7 @@ private func parseOptions(arguments: [String]) throws -> (values: [String: Strin
         let argument = arguments[index]
 
         switch argument {
-        case "--help", "-h", "--version", "--doctor", "--list-displays", "--all-displays", "--list-windows", "--list-visible-windows", "--visible-window", "--frontmost-window", "--list-accessibility-windows", "--list-ax-windows", "--list-elements", "--interactive", "--flat", "--list-menu-bar-items", "--menu-bar-press", "--get", "--get-element", "--wait-for-element", "--press", "--press-element", "--raise-window", "--raise", "--close-window", "--minimize-window", "--right", "--double", "--capture-menu", "--ascii-invert", "--ascii-no-ocr", "--ocr-only", "--raw", "--with-ascii", "--with-ocr", "--no-prompt":
+        case "--help", "-h", "--version", "--doctor", "--list-displays", "--all-displays", "--list-windows", "--list-visible-windows", "--visible-window", "--frontmost-window", "--list-accessibility-windows", "--list-ax-windows", "--list-elements", "--interactive", "--flat", "--list-menu-bar-items", "--menu-tree", "--menu-bar-press", "--get", "--get-element", "--wait-for-element", "--press", "--press-element", "--raise-window", "--raise", "--close-window", "--minimize-window", "--right", "--double", "--capture-menu", "--ascii-invert", "--ascii-no-ocr", "--ocr-only", "--raw", "--with-ascii", "--with-ocr", "--no-prompt":
             flags.insert(argument)
             index += 1
         case "--x", "--y", "--width", "--height", "--display", "--output", "--app", "--app-name", "--pid", "--find-app", "--timeout", "--window-index", "--window-name", "--window-crop", "--menu-bar-index", "--menu-bar-item", "--press-menu-item", "--element-at", "--wait-for-window", "--press-at", "--path", "--role", "--subrole", "--title", "--identifier", "--description", "--set-value", "--type", "--key", "--click", "--drag", "--scroll", "--move-window", "--resize-window", "--depth", "--max-children", "--roles", "--ascii", "--ascii-width", "--ascii-max-height", "--ascii-style", "--ascii-language", "--format", "--quality", "--max-dimension":
@@ -5257,6 +5326,25 @@ private func handleMenuBar(using command: MenuBarCommand) async throws -> String
             items: catalog.items.map(menuBarItemEntry(for:))
         )
         return try encodeJSON(response)
+    case .tree(let options):
+        let items: [MenuBarCatalogItem]
+        if let selection = command.selection {
+            items = [try selectMenuBarItem(from: catalog, using: selection)]
+        } else {
+            items = catalog.items
+        }
+
+        let response = MenuTreeResponse(
+            application: windowListApplication(for: catalog.application),
+            items: items.map { item in
+                menuTreeNode(
+                    for: item,
+                    depthRemaining: options.depth,
+                    childLimit: options.childLimit
+                )
+            }
+        )
+        return try encodeJSON(response)
     case .pressItem:
         let item = try selectMenuBarItem(from: catalog, using: command.selection)
         let menu = try activateMenuBarItem(item, requireVisibleMenu: false)
@@ -6390,6 +6478,131 @@ private func menuBarItemEntry(for item: MenuBarCatalogItem) -> MenuBarItemEntry 
         actions: item.actions,
         childCount: item.childCount
     )
+}
+
+private func menuTreeNode(
+    for item: MenuBarCatalogItem,
+    depthRemaining: Int,
+    childLimit: Int
+) -> MenuTreeNode {
+    menuTreeNode(
+        for: item.element,
+        path: String(item.index),
+        index: item.index,
+        source: item.source,
+        depthRemaining: depthRemaining,
+        childLimit: childLimit
+    )
+}
+
+private func menuTreeNode(
+    for element: AXUIElement,
+    path: String,
+    index: Int? = nil,
+    source: String? = nil,
+    depthRemaining: Int,
+    childLimit: Int
+) -> MenuTreeNode {
+    let rawChildren = copyAXElements(from: element, attribute: kAXChildrenAttribute as CFString)
+    let limitedChildren = depthRemaining > 0 ? Array(rawChildren.prefix(childLimit)) : []
+    let nestedChildren = limitedChildren.enumerated().map { childIndex, child in
+        menuTreeNode(
+            for: child,
+            path: "\(path).\(childIndex)",
+            depthRemaining: depthRemaining - 1,
+            childLimit: childLimit
+        )
+    }
+    let role = copyAXString(from: element, attribute: kAXRoleAttribute as CFString)
+    let checkState = menuItemCheckState(for: element, role: role)
+
+    return MenuTreeNode(
+        path: path,
+        index: index,
+        source: source,
+        role: role,
+        subrole: copyAXString(from: element, attribute: kAXSubroleAttribute as CFString),
+        title: normalizedTitle(copyAXString(from: element, attribute: kAXTitleAttribute as CFString)),
+        description: normalizedTitle(copyAXString(from: element, attribute: kAXDescriptionAttribute as CFString)),
+        identifier: normalizedTitle(copyAXString(from: element, attribute: kAXIdentifierAttribute as CFString)),
+        enabled: copyAXBool(from: element, attribute: kAXEnabledAttribute as CFString),
+        checked: checkState.checked,
+        mark: checkState.mark,
+        shortcut: menuShortcut(for: element),
+        frame: copyAXFrame(from: element).map(JSONRect.init),
+        actions: copyAXActions(from: element),
+        childCount: rawChildren.count,
+        truncated: rawChildren.count > limitedChildren.count ? true : nil,
+        children: nestedChildren.isEmpty ? nil : nestedChildren
+    )
+}
+
+private func menuItemCheckState(
+    for element: AXUIElement,
+    role: String?
+) -> (checked: Bool?, mark: String?) {
+    var value: CFTypeRef?
+    if
+        AXUIElementCopyAttributeValue(element, kAXMenuItemMarkCharAttribute as CFString, &value) == .success,
+        let rawMark = value as? String
+    {
+        let mark = normalizedTitle(rawMark)
+        return (mark != nil, mark)
+    }
+
+    if role == (kAXMenuItemRole as String) {
+        return (false, nil)
+    }
+
+    return (nil, nil)
+}
+
+private func menuShortcut(for element: AXUIElement) -> MenuShortcut? {
+    menuShortcut(
+        character: normalizedTitle(copyAXString(from: element, attribute: kAXMenuItemCmdCharAttribute as CFString)),
+        virtualKey: copyAXInteger(from: element, attribute: kAXMenuItemCmdVirtualKeyAttribute as CFString),
+        glyph: copyAXInteger(from: element, attribute: kAXMenuItemCmdGlyphAttribute as CFString),
+        modifierMask: copyAXUInt32(from: element, attribute: kAXMenuItemCmdModifiersAttribute as CFString)
+    )
+}
+
+func menuShortcut(
+    character: String?,
+    virtualKey: Int?,
+    glyph: Int?,
+    modifierMask: UInt32?
+) -> MenuShortcut? {
+    guard character != nil || virtualKey != nil || glyph != nil else {
+        return nil
+    }
+
+    return MenuShortcut(
+        character: character,
+        virtualKey: virtualKey,
+        glyph: glyph,
+        modifierMask: modifierMask,
+        modifiers: modifierMask.map(menuShortcutModifierNames)
+    )
+}
+
+func menuShortcutModifierNames(_ mask: UInt32) -> [String] {
+    let shiftMask: UInt32 = 1 << 0
+    let optionMask: UInt32 = 1 << 1
+    let controlMask: UInt32 = 1 << 2
+    let noCommandMask: UInt32 = 1 << 3
+    let knownMask = shiftMask | optionMask | controlMask | noCommandMask
+    var modifiers: [String] = []
+
+    if mask & controlMask != 0 { modifiers.append("control") }
+    if mask & optionMask != 0 { modifiers.append("option") }
+    if mask & shiftMask != 0 { modifiers.append("shift") }
+    if mask & noCommandMask == 0 { modifiers.append("command") }
+    let unknownMask = mask & ~knownMask
+    if unknownMask != 0 {
+        modifiers.append(String(format: "unknown:0x%X", unknownMask))
+    }
+
+    return modifiers
 }
 
 private func buildMenuBarItemCatalog(selector: ApplicationSelector) throws -> MenuBarItemCatalog {
@@ -8787,6 +9000,30 @@ private func copyAXBool(from element: AXUIElement, attribute: CFString) -> Bool?
     }
 
     return nil
+}
+
+private func copyAXInteger(from element: AXUIElement, attribute: CFString) -> Int? {
+    var value: CFTypeRef?
+    guard
+        AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+        let number = value as? NSNumber
+    else {
+        return nil
+    }
+
+    return number.intValue
+}
+
+private func copyAXUInt32(from element: AXUIElement, attribute: CFString) -> UInt32? {
+    var value: CFTypeRef?
+    guard
+        AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+        let number = value as? NSNumber
+    else {
+        return nil
+    }
+
+    return number.uint32Value
 }
 
 func stringifyAXAttributeValue(_ value: Any) -> String? {

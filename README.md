@@ -11,7 +11,7 @@ thing instead of guessing screen rectangles:
 - list app windows
 - capture a window or a visible floating panel
 - list, raise, move, resize, close, and minimize accessibility windows
-- open and capture a menu-bar item
+- inspect nested menu hierarchies, or open and capture a menu-bar item
 - read accessibility element state and press/set/type/key/click/drag/scroll UI
 - launch, activate, quit, and wait for local apps
 - open a document through macOS's normal app handoff, including with a specific app
@@ -21,7 +21,7 @@ thing instead of guessing screen rectangles:
 
 ## Install
 
-Download `BrrainzTools-v2.0.0-macos.dmg` from the GitHub release, open it, and run
+Download `BrrainzTools-v2.1.0-macos.dmg` from the GitHub release, open it, and run
 `Install BrrainzTools.command`.
 
 The installer copies `brrainztools` to `~/Scripts/brrainztools`.
@@ -75,6 +75,7 @@ brrainztools windows --app Terminal --visible
 brrainztools capture --app Terminal --visible-window --output ~/Desktop/terminal.png
 brrainztools capture --app Terminal --with-ocr --max-dimension 1200
 brrainztools menu --app Drafty list
+brrainztools menu --app Finder tree
 brrainztools menu --app Drafty press --menu-bar-index 0
 brrainztools menu --app Drafty press-item "Quick Tasks" --menu-bar-index 0
 brrainztools ascii ~/Desktop/terminal.png --ocr-only
