@@ -14,6 +14,7 @@ brrainztools ax --app Terminal tree --depth 2
 brrainztools menu --app Drafty list
 brrainztools menu --app Finder tree
 brrainztools ascii /tmp/screenshot.png --ocr-only
+brrainztools ask-image /tmp/screenshot.png "What is weird about this image?"
 brrainztools displays
 brrainztools open-file ./README.md
 brrainztools reveal ./README.md
@@ -32,6 +33,10 @@ same written image. Errors are compact JSON envelopes on stderr with
 Add `--raw` to capture, menu-capture, or ASCII commands when a script needs the
 legacy bare path or report output. `--raw` cannot be combined with
 `--with-ascii` or `--with-ocr`.
+
+`ask-image` is intentionally different: it prints the answer itself as raw text.
+With `--json`, it prints only a validated JSON value, without an envelope or
+Markdown wrapper.
 
 ## Version
 
@@ -92,6 +97,26 @@ and `pathNotFound`; a directory or failed handoff exits with code 70 and
 `openFailed`.
 
 The compatibility form `brrainztools --open-file PATH ...` is also accepted.
+
+## Ask About An Image
+
+```bash
+brrainztools ask-image ~/Desktop/screenshot.png "What is weird about this image?"
+brrainztools ask-image ~/Desktop/screenshot.png "Return the people and their locations." --json
+```
+
+`ask-image` starts an ephemeral, non-interactive Codex session with
+`gpt-5.4-mini` and medium reasoning, attaches the supplied image, and prints the
+final answer directly. It locates `codex` through `CODEX_BIN_PATH`, the current
+`PATH`, and standard Homebrew/local-bin locations. The command requires an
+authenticated Codex CLI. Each request runs from an isolated temporary working
+directory that contains only a copied image and returns an error after 60 seconds
+if Codex has not finished.
+
+Use `--json` when the caller needs structured data. BrrainzTools asks Codex for
+only JSON and rejects an answer that is not valid JSON, so stdout remains safe to
+pipe into a JSON consumer. The JSON shape follows the question; BrrainzTools
+does not wrap or alter it.
 
 ## App Lifecycle
 

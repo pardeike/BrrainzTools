@@ -445,6 +445,182 @@ final class BrrainzToolsTests: XCTestCase {
         XCTAssertFalse(revealWasRequested)
     }
 
+    func testAskImageParsingAndHelp() throws {
+        let textBehavior = try parse(arguments: [
+            "ask-image",
+            "/tmp/screenshot.png",
+            "What is weird about this image?",
+        ])
+        guard case .askImage(let textCommand) = textBehavior else {
+            return XCTFail("Expected ask-image behavior.")
+        }
+        XCTAssertEqual(textCommand.imagePath, "/tmp/screenshot.png")
+        XCTAssertEqual(textCommand.question, "What is weird about this image?")
+        XCTAssertFalse(textCommand.jsonOutput)
+
+        let jsonBehavior = try parse(arguments: [
+            "ask-image",
+            "/tmp/screenshot.png",
+            "List the visible objects.",
+            "--json",
+        ])
+        guard case .askImage(let jsonCommand) = jsonBehavior else {
+            return XCTFail("Expected ask-image behavior.")
+        }
+        XCTAssertTrue(jsonCommand.jsonOutput)
+
+        let helpBehavior = try parse(arguments: ["ask-image", "--help"])
+        guard case .showHelpText(let helpText) = helpBehavior else {
+            return XCTFail("Expected ask-image help.")
+        }
+        XCTAssertTrue(helpText.contains("brrainztools ask-image IMAGE"))
+        XCTAssertTrue(helpText.contains("--json"))
+    }
+
+    func testAskImageParsingRejectsIncompleteOrUnexpectedArguments() {
+        for arguments in [
+            ["ask-image"],
+            ["ask-image", "/tmp/screenshot.png"],
+            ["ask-image", "", "What is shown?"],
+            ["ask-image", "/tmp/screenshot.png", ""],
+            ["ask-image", "/tmp/screenshot.png", "Question", "extra"],
+            ["ask-image", "/tmp/screenshot.png", "Question", "--bad"],
+            ["ask-image", "/tmp/screenshot.png", "Question", "--json", "--json"],
+        ] {
+            XCTAssertThrowsError(try parse(arguments: arguments)) { error in
+                XCTAssertTrue(String(describing: error).contains("ask-image"))
+            }
+        }
+    }
+
+    func testAskImageUsesPinnedCodexSettingsAndReturnsFinalText() throws {
+        let expectedImageURL = URL(fileURLWithPath: "/tmp/screenshot.png")
+        let expectedCodexURL = URL(fileURLWithPath: "/opt/homebrew/bin/codex")
+        var launchedExecutableURL: URL?
+        var launchedArguments: [String] = []
+
+        let answer = try askImage(
+            using: AskImageCommand(
+                imagePath: expectedImageURL.path,
+                question: "What is weird about this image?",
+                jsonOutput: false
+            ),
+            pathStatus: { _ in (true, false) },
+            isReadableImage: { _ in true },
+            resolveCodexExecutable: { expectedCodexURL },
+            runCodex: { executableURL, arguments in
+                launchedExecutableURL = executableURL
+                launchedArguments = arguments
+                return CodexProcessResult(
+                    exitStatus: 0,
+                    standardOutput: #"{"type":"thread.started","thread_id":"test"}"# + "\n" +
+                        #"{"type":"item.completed","item":{"type":"agent_message","text":"The person is far too small for the room."}}"# + "\n",
+                    standardError: ""
+                )
+            }
+        )
+
+        XCTAssertEqual(answer, "The person is far too small for the room.")
+        XCTAssertEqual(launchedExecutableURL, expectedCodexURL)
+        XCTAssertTrue(launchedArguments.starts(with: ["exec", "--json", "--skip-git-repo-check"]))
+        XCTAssertTrue(launchedArguments.contains("gpt-5.4-mini"))
+        XCTAssertTrue(launchedArguments.contains(#"model_reasoning_effort="medium""#))
+        XCTAssertEqual(
+            Array(launchedArguments.suffix(4)),
+            ["--image", expectedImageURL.path, "--", "What is weird about this image?"]
+        )
+    }
+
+    func testCodexSandboxArgumentsUseOnlyTheIsolatedWorkingDirectory() throws {
+        let workingDirectory = URL(fileURLWithPath: "/tmp/brrainztools-codex-test", isDirectory: true)
+        let arguments = try codexSandboxArguments(
+            ["exec", "--image", "/Users/ap/Desktop/private screenshot.png", "--", "What is shown?"],
+            workingDirectory: workingDirectory
+        )
+
+        XCTAssertEqual(arguments.prefix(3), ["--cd", workingDirectory.path, "exec"])
+        XCTAssertEqual(codexImageURL(from: arguments)?.path, workingDirectory.appendingPathComponent("image.png").path)
+        XCTAssertFalse(arguments.contains("/Users/ap/Desktop/private screenshot.png"))
+    }
+
+    func testAskImageJSONModeReturnsOnlyValidatedJSON() throws {
+        let answer = try askImage(
+            using: AskImageCommand(
+                imagePath: "/tmp/screenshot.png",
+                question: "Count the people.",
+                jsonOutput: true
+            ),
+            pathStatus: { _ in (true, false) },
+            isReadableImage: { _ in true },
+            resolveCodexExecutable: { URL(fileURLWithPath: "/tmp/codex") },
+            runCodex: { _, arguments in
+                XCTAssertTrue(arguments.last?.contains("Return only valid JSON") == true)
+                return CodexProcessResult(
+                    exitStatus: 0,
+                    standardOutput: #"{"type":"item.completed","item":{"type":"agent_message","text":"{\"people\":1}"}}"# + "\n",
+                    standardError: ""
+                )
+            }
+        )
+
+        XCTAssertEqual(answer, #"{"people":1}"#)
+        XCTAssertNoThrow(
+            try JSONSerialization.jsonObject(
+                with: Data(answer.utf8),
+                options: [.fragmentsAllowed]
+            )
+        )
+    }
+
+    func testAskImageRejectsInvalidJSONAndCodexFailures() {
+        let command = AskImageCommand(
+            imagePath: "/tmp/screenshot.png",
+            question: "Count the people.",
+            jsonOutput: true
+        )
+        let commonPathStatus: (String) -> (exists: Bool, isDirectory: Bool) = { _ in (true, false) }
+        let commonImageCheck: (URL) -> Bool = { _ in true }
+        let commonResolver: () throws -> URL = { URL(fileURLWithPath: "/tmp/codex") }
+
+        XCTAssertThrowsError(
+            try askImage(
+                using: command,
+                pathStatus: commonPathStatus,
+                isReadableImage: commonImageCheck,
+                resolveCodexExecutable: commonResolver,
+                runCodex: { _, _ in
+                    CodexProcessResult(
+                        exitStatus: 0,
+                        standardOutput: #"{"type":"item.completed","item":{"type":"agent_message","text":"people: 1"}}"# + "\n",
+                        standardError: ""
+                    )
+                }
+            )
+        ) { error in
+            XCTAssertEqual((error as? BrrainzToolsError)?.kind, "codexFailed")
+            XCTAssertTrue(error.localizedDescription.contains("valid JSON"))
+        }
+
+        XCTAssertThrowsError(
+            try askImage(
+                using: command,
+                pathStatus: commonPathStatus,
+                isReadableImage: commonImageCheck,
+                resolveCodexExecutable: commonResolver,
+                runCodex: { _, _ in
+                    CodexProcessResult(
+                        exitStatus: 1,
+                        standardOutput: "",
+                        standardError: "model unavailable"
+                    )
+                }
+            )
+        ) { error in
+            XCTAssertEqual((error as? BrrainzToolsError)?.kind, "codexFailed")
+            XCTAssertTrue(error.localizedDescription.contains("model unavailable"))
+        }
+    }
+
     func testOpenFileParsingUsesDefaultApplication() throws {
         let behavior = try parse(arguments: ["open-file", "./README.md"])
 

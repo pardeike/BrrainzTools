@@ -11,8 +11,9 @@ Prefer it over raw `screencapture`, generic screenshots, System Events AppleScri
 
 - discover running apps and displays with `brrainztools apps QUERY` and `brrainztools displays`
 - capture rectangles, displays, app windows, visible floating panels, and menu-bar/status-item menus with `brrainztools capture ...` and `brrainztools menu ... capture`
-- return compact JSON envelopes, structured JSON errors, and explicit exit codes for agent branching
+- return compact JSON envelopes, structured JSON errors, and explicit exit codes for agent branching; `ask-image` intentionally returns raw text or a raw validated JSON value
 - add cheap text output to captures with `--with-ocr` or `--with-ascii`, downscale images with `--max-dimension`, and inspect existing images with `brrainztools ascii IMAGE --ocr-only`
+- ask a direct visual question with `brrainztools ask-image IMAGE "QUESTION"`; it isolates a copied image in a temporary working directory and fails after 60 seconds, and `--json` returns a pure validated JSON value for another tool
 - list windows with `brrainztools windows --app APP [--visible|--ax]`
 - inspect Accessibility trees and state with `brrainztools ax --app APP tree|get|wait-for-element`, including `value`, `enabled`, `focused`, `selected`, stable `path` selectors, `--interactive`, `--flat`, `--depth`, `--max-children`, and `--roles`
 - inspect nested menus without opening or activating them with `brrainztools menu --app APP tree`, including enabled/check state, shortcuts, actions, stable paths, and optional `--depth`, `--max-children`, or menu-bar selection

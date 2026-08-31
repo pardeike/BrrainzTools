@@ -37,6 +37,8 @@ struct BrrainzTools {
             case .openFile(let command):
                 let json = try openFile(using: command)
                 print(try dataEnvelopeJSON(mode: "open-file", dataJSON: json))
+            case .askImage(let command):
+                print(try askImage(using: command))
             case .listDisplays:
                 let json = try listDisplays()
                 print(try dataEnvelopeJSON(mode: "displays", dataJSON: json))
@@ -136,6 +138,7 @@ enum CommandBehavior: Sendable {
     case clipboard(ClipboardCommand)
     case revealFile(RevealCommand)
     case openFile(OpenFileCommand)
+    case askImage(AskImageCommand)
     case listDisplays
     case activateApplication(ActivateApplicationCommand)
     case launchApplication(LaunchApplicationCommand)
@@ -153,7 +156,7 @@ enum CommandBehavior: Sendable {
         switch self {
         case .showHelp, .showHelpText, .showVersion, .doctor, .clipboard, .listDisplays:
             return false
-        case .revealFile, .openFile, .activateApplication, .launchApplication, .quitApplication, .findApps, .asciiArt, .capture, .captureVisibleWindow, .listWindows, .listVisibleWindows, .inspectAccessibility, .menuBar:
+        case .revealFile, .openFile, .askImage, .activateApplication, .launchApplication, .quitApplication, .findApps, .asciiArt, .capture, .captureVisibleWindow, .listWindows, .listVisibleWindows, .inspectAccessibility, .menuBar:
             return true
         }
     }
@@ -214,6 +217,18 @@ struct OpenFileCommand: Sendable {
     let waitForWindow: Bool
     let promptForAccessibility: Bool
     let timeout: TimeInterval
+}
+
+struct AskImageCommand: Sendable {
+    let imagePath: String
+    let question: String
+    let jsonOutput: Bool
+}
+
+struct CodexProcessResult: Sendable {
+    let exitStatus: Int32
+    let standardOutput: String
+    let standardError: String
 }
 
 struct AsciiArtCommand: Sendable {
@@ -1321,6 +1336,7 @@ enum BrrainzToolsError: LocalizedError, Sendable {
     case pathNotFound(String)
     case openFailed(String)
     case launchFailed(String)
+    case codexFailed(String)
     case captureFailed(String)
     case operationTimedOut(String)
     case accessibilityQueryFailed(String)
@@ -1352,6 +1368,8 @@ enum BrrainzToolsError: LocalizedError, Sendable {
             return "openFailed"
         case .launchFailed:
             return "launchFailed"
+        case .codexFailed:
+            return "codexFailed"
         case .captureFailed:
             return "captureFailed"
         case .operationTimedOut:
@@ -1389,6 +1407,8 @@ enum BrrainzToolsError: LocalizedError, Sendable {
             return message
         case .launchFailed(let message):
             return message
+        case .codexFailed(let message):
+            return message
         case .captureFailed(let message):
             return message
         case .operationTimedOut(let message):
@@ -1410,7 +1430,7 @@ enum BrrainzToolsError: LocalizedError, Sendable {
             return 66
         case .capturePermissionDenied, .accessibilityPermissionDenied:
             return 69
-        case .openFailed, .launchFailed, .captureFailed, .accessibilityQueryFailed, .encodeFailed:
+        case .openFailed, .launchFailed, .codexFailed, .captureFailed, .accessibilityQueryFailed, .encodeFailed:
             return 70
         case .operationTimedOut:
             return 75
@@ -1449,6 +1469,7 @@ Subcommands:
   ax        AX tree/get/press/input/window actions
   menu      menu-bar list/tree/press/press-item/capture
   ascii     image to ASCII/OCR text
+  ask-image ask Codex a question about an image
   open-file open a document through macOS Launch Services
   reveal    select a file or directory in Finder
   displays | doctor | clipboard
@@ -1617,6 +1638,15 @@ Usage:
 Asks macOS to open PATH as a document, using its default app unless `--app`
 specifies an app bundle path or bundle id. `--wait-window` waits for the app's
 first Accessibility window.
+"""
+
+private let askImageHelpText = """
+Usage:
+  brrainztools ask-image IMAGE "QUESTION" [--json]
+
+Asks Codex gpt-5.4-mini with medium reasoning about IMAGE and prints its answer
+as raw text. `--json` requests JSON, validates the final response, and prints only
+that JSON value. Requires an authenticated Codex CLI installation.
 """
 
 private let launchHelpText = """
@@ -1914,6 +1944,290 @@ func openFile(
             window: waitedWindow
         )
     )
+}
+
+func askImage(
+    using command: AskImageCommand,
+    pathStatus: (String) -> (exists: Bool, isDirectory: Bool) = { path in
+        var isDirectory = ObjCBool(false)
+        let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+        return (exists, isDirectory.boolValue)
+    },
+    isReadableImage: (URL) -> Bool = { url in
+        CGImageSourceCreateWithURL(url as CFURL, nil) != nil
+    },
+    resolveCodexExecutable: () throws -> URL = { try codexExecutableURL() },
+    runCodex: (URL, [String]) throws -> CodexProcessResult = { executableURL, arguments in
+        try runCodexProcess(executableURL: executableURL, arguments: arguments)
+    }
+) throws -> String {
+    let imageURL = fileURL(from: command.imagePath)
+    let status = pathStatus(imageURL.path)
+
+    guard status.exists else {
+        throw BrrainzToolsError.pathNotFound("No image exists at `\(imageURL.path)`.")
+    }
+
+    guard !status.isDirectory else {
+        throw BrrainzToolsError.invalidArguments("Ask-image path `\(imageURL.path)` is a directory, not an image file.")
+    }
+
+    guard isReadableImage(imageURL) else {
+        throw BrrainzToolsError.invalidArguments("Ask-image path `\(imageURL.path)` is not a readable image.")
+    }
+
+    let executableURL = try resolveCodexExecutable()
+    let arguments = codexAskImageArguments(
+        imageURL: imageURL,
+        question: command.question,
+        jsonOutput: command.jsonOutput
+    )
+    let result = try runCodex(executableURL, arguments)
+
+    guard result.exitStatus == 0 else {
+        let detail = codexFailureDetail(result)
+        throw BrrainzToolsError.codexFailed(
+            "Codex image question failed with exit status \(result.exitStatus): \(detail)"
+        )
+    }
+
+    let answer = try codexFinalResponse(from: result.standardOutput)
+    if command.jsonOutput {
+        guard isValidJSON(answer) else {
+            throw BrrainzToolsError.codexFailed("Codex did not return valid JSON for `ask-image --json`.")
+        }
+    }
+
+    return answer
+}
+
+func codexAskImageArguments(imageURL: URL, question: String, jsonOutput: Bool) -> [String] {
+    let prompt: String
+    if jsonOutput {
+        prompt = """
+        \(question)
+
+        Return only valid JSON. Do not use Markdown code fences or include any text outside the JSON value.
+        """
+    } else {
+        prompt = question
+    }
+
+    return [
+        "exec",
+        "--json",
+        "--skip-git-repo-check",
+        "--ephemeral",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "--sandbox", "read-only",
+        "--model", "gpt-5.4-mini",
+        "-c", #"model_reasoning_effort="medium""#,
+        "--image", imageURL.path,
+        "--",
+        prompt,
+    ]
+}
+
+func codexExecutableURL(
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    isExecutableFile: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+) throws -> URL {
+    var candidates: [String] = []
+
+    if let explicitPath = normalizedArgumentValue(environment["CODEX_BIN_PATH"]) {
+        candidates.append((explicitPath as NSString).expandingTildeInPath)
+    }
+
+    if let path = environment["PATH"] {
+        candidates += path
+            .split(separator: ":")
+            .map { URL(fileURLWithPath: String($0)).appendingPathComponent("codex").path }
+    }
+
+    candidates += [
+        "/opt/homebrew/bin/codex",
+        "/usr/local/bin/codex",
+        "/usr/bin/codex",
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".local/bin/codex")
+            .path,
+    ]
+
+    var seen = Set<String>()
+    for candidate in candidates where seen.insert(candidate).inserted {
+        if isExecutableFile(candidate) {
+            return URL(fileURLWithPath: candidate)
+        }
+    }
+
+    throw BrrainzToolsError.codexFailed(
+        "Could not find the Codex CLI. Install `codex`, add it to PATH, or set CODEX_BIN_PATH."
+    )
+}
+
+private struct CodexExecEvent: Decodable {
+    let type: String
+    let item: CodexExecItem?
+}
+
+private struct CodexExecItem: Decodable {
+    let type: String
+    let text: String?
+}
+
+private func codexFinalResponse(from output: String) throws -> String {
+    var finalResponse: String?
+
+    for line in output.split(whereSeparator: \.isNewline) {
+        guard
+            let data = String(line).data(using: .utf8),
+            let event = try? JSONDecoder().decode(CodexExecEvent.self, from: data),
+            event.type == "item.completed",
+            event.item?.type == "agent_message",
+            let text = event.item?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !text.isEmpty
+        else {
+            continue
+        }
+
+        finalResponse = text
+    }
+
+    guard let finalResponse else {
+        throw BrrainzToolsError.codexFailed("Codex completed without returning an image answer.")
+    }
+
+    return finalResponse
+}
+
+private func isValidJSON(_ value: String) -> Bool {
+    guard let data = value.data(using: .utf8) else {
+        return false
+    }
+
+    return (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) != nil
+}
+
+private func codexFailureDetail(_ result: CodexProcessResult) -> String {
+    let stderr = result.standardError.trimmingCharacters(in: .whitespacesAndNewlines)
+    let stdout = result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+    let detail = stderr.isEmpty ? stdout : stderr
+    guard !detail.isEmpty else {
+        return "no diagnostic output"
+    }
+
+    return String(detail.suffix(2_000))
+}
+
+private func runCodexProcess(executableURL: URL, arguments: [String]) throws -> CodexProcessResult {
+    let fileManager = FileManager.default
+    let temporaryDirectory = fileManager.temporaryDirectory
+        .appendingPathComponent("brrainztools-codex-\(UUID().uuidString.lowercased())", isDirectory: true)
+    let standardOutputURL = temporaryDirectory.appendingPathComponent("stdout.jsonl")
+    let standardErrorURL = temporaryDirectory.appendingPathComponent("stderr.txt")
+
+    do {
+        try fileManager.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        try Data().write(to: standardOutputURL)
+        try Data().write(to: standardErrorURL)
+    } catch {
+        throw BrrainzToolsError.codexFailed("Failed to prepare Codex output files: \(error.localizedDescription)")
+    }
+    defer { try? fileManager.removeItem(at: temporaryDirectory) }
+
+    let sandboxedArguments: [String]
+    do {
+        sandboxedArguments = try codexSandboxArguments(
+            arguments,
+            workingDirectory: temporaryDirectory
+        )
+        guard let sourceImageURL = codexImageURL(from: arguments) else {
+            throw BrrainzToolsError.codexFailed("Codex image invocation is missing its image path.")
+        }
+        guard let sandboxImageURL = codexImageURL(from: sandboxedArguments) else {
+            throw BrrainzToolsError.codexFailed("Failed to prepare the isolated Codex image path.")
+        }
+        try fileManager.copyItem(at: sourceImageURL, to: sandboxImageURL)
+    } catch let error as BrrainzToolsError {
+        throw error
+    } catch {
+        throw BrrainzToolsError.codexFailed("Failed to isolate the image for Codex: \(error.localizedDescription)")
+    }
+
+    let standardOutputHandle: FileHandle
+    let standardErrorHandle: FileHandle
+    do {
+        standardOutputHandle = try FileHandle(forWritingTo: standardOutputURL)
+        standardErrorHandle = try FileHandle(forWritingTo: standardErrorURL)
+    } catch {
+        throw BrrainzToolsError.codexFailed("Failed to open Codex output files: \(error.localizedDescription)")
+    }
+    defer {
+        try? standardOutputHandle.close()
+        try? standardErrorHandle.close()
+    }
+
+    let process = Process()
+    process.executableURL = executableURL
+    process.arguments = sandboxedArguments
+    process.currentDirectoryURL = temporaryDirectory
+    process.standardInput = FileHandle.nullDevice
+    process.standardOutput = standardOutputHandle
+    process.standardError = standardErrorHandle
+
+    let termination = DispatchSemaphore(value: 0)
+    process.terminationHandler = { _ in termination.signal() }
+
+    do {
+        try process.run()
+    } catch {
+        throw BrrainzToolsError.codexFailed(
+            "Failed to start Codex at `\(executableURL.path)`: \(error.localizedDescription)"
+        )
+    }
+
+    guard termination.wait(timeout: .now() + 60) == .success else {
+        process.terminate()
+        if termination.wait(timeout: .now() + 2) == .timedOut {
+            _ = Darwin.kill(process.processIdentifier, SIGKILL)
+        }
+        throw BrrainzToolsError.codexFailed("Codex did not finish within 60 seconds.")
+    }
+
+    try? standardOutputHandle.close()
+    try? standardErrorHandle.close()
+
+    let standardOutput = (try? String(contentsOf: standardOutputURL, encoding: .utf8)) ?? ""
+    let standardError = (try? String(contentsOf: standardErrorURL, encoding: .utf8)) ?? ""
+    return CodexProcessResult(
+        exitStatus: process.terminationStatus,
+        standardOutput: standardOutput,
+        standardError: standardError
+    )
+}
+
+func codexSandboxArguments(_ arguments: [String], workingDirectory: URL) throws -> [String] {
+    guard let imageIndex = arguments.firstIndex(of: "--image"), imageIndex + 1 < arguments.endIndex else {
+        throw BrrainzToolsError.codexFailed("Codex image invocation is missing its image path.")
+    }
+
+    let sourceImageURL = URL(fileURLWithPath: arguments[imageIndex + 1])
+    let fileExtension = sourceImageURL.pathExtension
+    let sandboxImageURL = workingDirectory.appendingPathComponent(
+        fileExtension.isEmpty ? "image" : "image.\(fileExtension)"
+    )
+
+    var sandboxedArguments = arguments
+    sandboxedArguments[imageIndex + 1] = sandboxImageURL.path
+    return ["--cd", workingDirectory.path] + sandboxedArguments
+}
+
+func codexImageURL(from arguments: [String]) -> URL? {
+    guard let imageIndex = arguments.firstIndex(of: "--image"), imageIndex + 1 < arguments.endIndex else {
+        return nil
+    }
+    return URL(fileURLWithPath: arguments[imageIndex + 1])
 }
 
 func listDisplays() throws -> String {
@@ -2667,6 +2981,10 @@ func parse(arguments: [String]) throws -> CommandBehavior {
         return .openFile(try parseOpenFileCommand(arguments: Array(arguments.dropFirst())))
     }
 
+    if arguments.first == "ask-image" {
+        return .askImage(try parseAskImageCommand(arguments: Array(arguments.dropFirst())))
+    }
+
     if arguments.first == "activate" {
         return .activateApplication(try parseActivateApplicationCommand(arguments: Array(arguments.dropFirst())))
     }
@@ -3405,6 +3723,8 @@ private func parseSubcommand(arguments: [String]) throws -> CommandBehavior? {
         return isHelpRequest(trailingArguments) ? .showHelpText(revealHelpText) : nil
     case "open-file":
         return isHelpRequest(trailingArguments) ? .showHelpText(openFileHelpText) : nil
+    case "ask-image":
+        return isHelpRequest(trailingArguments) ? .showHelpText(askImageHelpText) : nil
     case "launch":
         return isHelpRequest(trailingArguments) ? .showHelpText(launchHelpText) : nil
     case "activate":
@@ -3847,6 +4167,43 @@ func parseOpenFileCommand(arguments: [String]) throws -> OpenFileCommand {
         waitForWindow: waitForWindow,
         promptForAccessibility: promptForAccessibility,
         timeout: timeout
+    )
+}
+
+func parseAskImageCommand(arguments: [String]) throws -> AskImageCommand {
+    var positionalArguments: [String] = []
+    var jsonOutput = false
+
+    for argument in arguments {
+        if argument == "--json" {
+            guard !jsonOutput else {
+                throw BrrainzToolsError.invalidArguments("`ask-image` accepts `--json` only once.")
+            }
+            jsonOutput = true
+        } else if argument.hasPrefix("--") {
+            throw BrrainzToolsError.invalidArguments("Unexpected `ask-image` option `\(argument)`.")
+        } else {
+            positionalArguments.append(argument)
+        }
+    }
+
+    guard positionalArguments.count == 2 else {
+        throw BrrainzToolsError.invalidArguments(
+            "`ask-image` requires exactly one IMAGE path and one quoted QUESTION, with optional `--json`."
+        )
+    }
+
+    guard let imagePath = normalizedArgumentValue(positionalArguments[0]) else {
+        throw BrrainzToolsError.invalidArguments("`ask-image` requires a non-empty IMAGE path.")
+    }
+    guard let question = normalizedArgumentValue(positionalArguments[1]) else {
+        throw BrrainzToolsError.invalidArguments("`ask-image` requires a non-empty QUESTION.")
+    }
+
+    return AskImageCommand(
+        imagePath: imagePath,
+        question: question,
+        jsonOutput: jsonOutput
     )
 }
 

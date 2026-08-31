@@ -18,6 +18,7 @@ thing instead of guessing screen rectangles:
 - reveal a file or directory as a Finder selection
 - read or set clipboard text
 - convert a screenshot to a compact text view
+- ask Codex a direct question about an existing image
 
 ## Install
 
@@ -79,6 +80,8 @@ brrainztools menu --app Finder tree
 brrainztools menu --app Drafty press --menu-bar-index 0
 brrainztools menu --app Drafty press-item "Quick Tasks" --menu-bar-index 0
 brrainztools ascii ~/Desktop/terminal.png --ocr-only
+brrainztools ask-image ~/Desktop/terminal.png "What is weird about this image?"
+brrainztools ask-image ~/Desktop/terminal.png "List the visible controls." --json
 brrainztools doctor
 brrainztools clipboard
 ```
