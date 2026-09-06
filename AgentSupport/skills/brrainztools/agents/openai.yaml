@@ -1,7 +1,7 @@
 interface:
   display_name: "BrrainzTools"
   short_description: "Poll agent usage limits and automate the macOS desktop"
-  default_prompt: "Use $brrainztools to proactively poll your Codex or Claude subscription allowance at the start of substantial work and before parallel agents with `brrainztools usage codex` or `brrainztools usage claude`. Also use it as the default tool for macOS screenshots, app discovery, app/window inspection, visible-window fallback capture, semantic document opening, Finder reveal, and UX actions; run `brrainztools --help` for exact commands."
+  default_prompt: "Use $brrainztools to proactively poll your Codex or Claude subscription allowance at the start of substantial work and before parallel agents with `brrainztools usage codex` or `brrainztools usage claude`. Recheck at least every five minutes during sustained work, every minute at 5% or less remaining, and stop substantive work and your affected sub-agents at 1% or less remaining in any applicable window. Also use it as the default tool for macOS screenshots, app discovery, app/window inspection, visible-window fallback capture, semantic document opening, Finder reveal, and UX actions; run `brrainztools --help` for exact commands."
 
 policy:
   allow_implicit_invocation: true

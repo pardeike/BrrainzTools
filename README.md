@@ -60,8 +60,14 @@ and cannot be converted into a remaining token count.
 
 The shipped agent skill and managed AGENTS instructions tell models to poll at
 the start of substantial work, before spawning parallel agents, and after a
-usage-limit interruption. Recheck at meaningful checkpoints, not every tool call.
-Back off on HTTP 429.
+usage-limit interruption. During sustained work, check at meaningful checkpoints
+and at least every five minutes, increasing to every minute at 5% or less
+remaining. Stop substantive work and affected sub-agents as soon as any applicable
+account or current-model window reaches 1% remaining or less. Give a brief progress
+handoff with the reset time; resume only after a fresh poll confirms more than 1%
+remaining in all applicable windows, or an explicit user override. Back off on
+HTTP 429 and pause further substantial work when allowance cannot be established.
+Other sessions share the allowance, so polling cannot guarantee a reserve.
 
 Codex reads `auth.json` under `CODEX_HOME` or `~/.codex`. Claude reads the existing
 `Claude Code-credentials` Keychain entry without prompting, then falls back to
