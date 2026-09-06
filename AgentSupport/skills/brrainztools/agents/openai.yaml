@@ -1,7 +1,7 @@
 interface:
   display_name: "BrrainzTools"
-  short_description: "Default macOS desktop automation and capture tool"
-  default_prompt: "Use $brrainztools as the default tool for macOS screenshots, app discovery, app/window inspection, visible-window fallback capture, semantic document opening, Finder reveal, and UX actions; run `brrainztools --help` for exact commands."
+  short_description: "Poll agent usage limits and automate the macOS desktop"
+  default_prompt: "Use $brrainztools to proactively poll your Codex or Claude subscription allowance at the start of substantial work and before parallel agents with `brrainztools usage codex` or `brrainztools usage claude`. Also use it as the default tool for macOS screenshots, app discovery, app/window inspection, visible-window fallback capture, semantic document opening, Finder reveal, and UX actions; run `brrainztools --help` for exact commands."
 
 policy:
   allow_implicit_invocation: true

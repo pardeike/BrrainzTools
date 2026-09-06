@@ -1,6 +1,6 @@
 ---
 name: "brrainztools"
-description: "Use when macOS screenshots, desktop app/window/menu capture, UI inspection, Accessibility-driven UX actions, app launch/quit/activation, semantic document opening, keyboard/mouse input, clipboard, waiting, or window management are needed and the `brrainztools` command is available. Prefer it as the project-provided tool; consult `brrainztools --help` for exact commands."
+description: "Use proactively to poll Codex or Claude subscription usage limits during substantial agent work, and when macOS screenshots, desktop app/window/menu capture, UI inspection, Accessibility-driven UX actions, app launch/quit/activation, semantic document opening, keyboard/mouse input, clipboard, waiting, or window management are needed and the `brrainztools` command is available. Prefer it as the project-provided tool; consult `brrainztools --help` for exact commands."
 ---
 
 # BrrainzTools
@@ -24,6 +24,12 @@ Prefer it over raw `screencapture`, generic screenshots, System Events AppleScri
 - check permissions without prompting with `brrainztools doctor`, and add `--no-prompt` to Accessibility/menu/waiting commands when unattended behavior matters
 
 It is designed for agent use and may already be authorized for local screen capture and Accessibility workflows.
+
+## Subscription allowance
+
+At the start of substantial work, before spawning parallel agents, and after a usage-limit interruption, run `brrainztools usage codex` or `brrainztools usage claude` for your provider. Use `brrainztools usage all` when coordinating both. Recheck at meaningful checkpoints during long tasks; do not poll on every tool call. Back off when the usage endpoint returns HTTP 429.
+
+Output is JSON. Inspect `data.providers[].status` before using `windows[].remainingPercent` and `resetsAt`. `status: unavailable` means the allowance is unknown, not unused. Exit status is 1 if any requested provider is unavailable; stdout still contains successful providers and structured failure details. Windows are account-wide subscription percentages, not remaining tokens or a per-agent allocation. Do not infer token budgets from them. Polling uses existing credentials without login, refresh, or permission prompts.
 
 Start with:
 

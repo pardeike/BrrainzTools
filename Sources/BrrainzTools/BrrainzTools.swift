@@ -25,6 +25,10 @@ struct BrrainzTools {
                 print(text)
             case .showVersion:
                 print(try basicEnvelopeJSON(mode: "version"))
+            case .usageLimits(let providers):
+                let report = await pollUsage(providers)
+                print(try dataEnvelopeJSON(mode: "usage", dataJSON: encodeJSON(report)))
+                if !report.succeeded { Darwin.exit(1) }
             case .doctor:
                 let json = try encodeJSON(currentDoctorStatus())
                 print(try dataEnvelopeJSON(mode: "doctor", dataJSON: json))
@@ -135,6 +139,7 @@ enum CommandBehavior: Sendable {
     case showHelpText(String)
     case showVersion
     case doctor
+    case usageLimits([UsageProvider])
     case clipboard(ClipboardCommand)
     case revealFile(RevealCommand)
     case openFile(OpenFileCommand)
@@ -154,7 +159,7 @@ enum CommandBehavior: Sendable {
 
     var shouldSynchronizeAgentSupport: Bool {
         switch self {
-        case .showHelp, .showHelpText, .showVersion, .doctor, .clipboard, .listDisplays:
+        case .showHelp, .showHelpText, .showVersion, .doctor, .clipboard, .listDisplays, .usageLimits:
             return false
         case .revealFile, .openFile, .askImage, .activateApplication, .launchApplication, .quitApplication, .findApps, .asciiArt, .capture, .captureVisibleWindow, .listWindows, .listVisibleWindows, .inspectAccessibility, .menuBar:
             return true
@@ -1469,6 +1474,7 @@ Subcommands:
   ax        AX tree/get/press/input/window actions
   menu      menu-bar list/tree/press/press-item/capture
   ascii     image to ASCII/OCR text
+  usage     live Codex/Claude subscription limits
   ask-image ask Codex a question about an image
   open-file open a document through macOS Launch Services
   reveal    select a file or directory in Finder
@@ -3715,6 +3721,15 @@ private func parseSubcommand(arguments: [String]) throws -> CommandBehavior? {
         return try parseASCIISubcommand(arguments: trailingArguments)
     case "displays":
         return try parseDisplaysSubcommand(arguments: trailingArguments)
+    case "usage":
+        if isHelpRequest(trailingArguments) { return .showHelpText(usageLimitsHelpText) }
+        if trailingArguments.isEmpty || trailingArguments == ["all"] {
+            return .usageLimits(UsageProvider.allCases)
+        }
+        guard trailingArguments.count == 1, let provider = UsageProvider(rawValue: trailingArguments[0]) else {
+            throw BrrainzToolsError.invalidArguments("Usage: brrainztools usage [codex|claude|all]")
+        }
+        return .usageLimits([provider])
     case "doctor":
         return isHelpRequest(trailingArguments) ? .showHelpText(doctorHelpText) : nil
     case "clipboard":
