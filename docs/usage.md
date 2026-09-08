@@ -44,6 +44,24 @@ Markdown wrapper.
 brrainztools --version
 ```
 
+## Subscription usage
+
+`brrainztools usage claude` and `brrainztools usage codex` read existing login
+credentials and return account allowance as JSON. Neither command starts login,
+refreshes credentials, or displays password/authorization dialogs. If credentials
+cannot be read silently, the provider reports `status: unavailable` and the
+command exits with status 1.
+
+Codex reads `auth.json` under `CODEX_HOME`, or `~/.codex` by default. Claude first
+reads `Claude Code-credentials` from Keychain, then falls back to
+`.credentials.json` under `CLAUDE_CONFIG_DIR`, or `~/.claude` by default.
+
+If Claude reports a Keychain access error, unlock the relevant Keychain and, if
+needed, use Keychain Access to add the installed `brrainztools` executable to the
+item's always-allowed applications under Access Control. Saving that permission
+may require your password once. Polling cannot grant itself access. Keep the
+permission specific to BrrainzTools.
+
 ## Doctor
 
 ```bash

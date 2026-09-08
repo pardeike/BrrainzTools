@@ -80,9 +80,22 @@ private struct UsageCredential: Decodable {
     let claudeAiOauth: OAuth?
 }
 
+// LAContext alone does not suppress file-based Keychain authorization dialogs.
+// Keep this synchronous: the interaction setting applies to the whole process.
+func withUsageKeychainInteractionDisabled<T>(_ operation: () throws -> T) throws -> T {
+    var previouslyAllowed: DarwinBoolean = false
+    guard SecKeychainGetUserInteractionAllowed(&previouslyAllowed) == errSecSuccess,
+          SecKeychainSetUserInteractionAllowed(false) == errSecSuccess else {
+        throw UsageFailure(message: "Could not disable Keychain interaction; credential lookup skipped.")
+    }
+    defer { SecKeychainSetUserInteractionAllowed(previouslyAllowed.boolValue) }
+    return try operation()
+}
+
 private func usageCredential(_ provider: UsageProvider) throws -> (token: String, account: String?) {
     let home = FileManager.default.homeDirectoryForCurrentUser
     let environment = ProcessInfo.processInfo.environment
+    var keychainStatus: OSStatus?
     if provider == .claude {
         // Polling must never open a Keychain authorization dialog.
         let context = LAContext()
@@ -95,7 +108,10 @@ private func usageCredential(_ provider: UsageProvider) throws -> (token: String
             kSecUseAuthenticationContext as String: context,
         ]
         var item: CFTypeRef?
-        if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+        keychainStatus = try withUsageKeychainInteractionDisabled {
+            SecItemCopyMatching(query as CFDictionary, &item)
+        }
+        if keychainStatus == errSecSuccess,
            let data = item as? Data,
            let credential = try? JSONDecoder().decode(UsageCredential.self, from: data),
            let token = credential.claudeAiOauth?.accessToken, !token.isEmpty {
@@ -114,6 +130,9 @@ private func usageCredential(_ provider: UsageProvider) throws -> (token: String
         if let token, !token.isEmpty {
             return (token, provider == .codex ? credential.tokens?.account_id ?? credential.account_id : nil)
         }
+    }
+    if let keychainStatus, keychainStatus != errSecSuccess, keychainStatus != errSecItemNotFound {
+        throw UsageFailure(message: "Claude Keychain credential could not be read silently (OSStatus \(keychainStatus)); no readable credential file was found. Check that the Keychain is unlocked and BrrainzTools is authorized for 'Claude Code-credentials' in Keychain Access before polling again.")
     }
     throw UsageFailure(message: "No readable OAuth credential. Run '\(provider == .codex ? "codex login" : "claude auth login")'.")
 }

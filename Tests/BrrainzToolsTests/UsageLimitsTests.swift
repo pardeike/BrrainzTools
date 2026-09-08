@@ -1,8 +1,75 @@
 import Foundation
+import Security
 import XCTest
 @testable import BrrainzTools
 
 final class UsageLimitsTests: XCTestCase {
+    func testLockedKeychainFailsWithoutInteraction() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("test.keychain").path
+        let password = UUID().uuidString
+        try withUsageKeychainInteractionDisabled {
+            var createdKeychain: SecKeychain?
+            let status = password.withCString { bytes in
+                SecKeychainCreate(path, UInt32(password.utf8.count), bytes, false, nil, &createdKeychain)
+            }
+            XCTAssertEqual(status, errSecSuccess)
+            let keychain = try XCTUnwrap(createdKeychain)
+            defer { SecKeychainDelete(keychain) }
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: "BrrainzTools-test",
+                kSecAttrAccount as String: "test",
+                kSecUseKeychain as String: keychain,
+                kSecValueData as String: Data("test-secret".utf8),
+            ]
+            XCTAssertEqual(SecItemAdd(query as CFDictionary, nil), errSecSuccess)
+            XCTAssertEqual(SecKeychainLock(keychain), errSecSuccess)
+            let lookup: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: "BrrainzTools-test",
+                kSecMatchSearchList as String: [keychain],
+                kSecReturnData as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne,
+            ]
+            var item: CFTypeRef?
+            let lookupStatus = SecItemCopyMatching(lookup as CFDictionary, &item)
+            // File-based Keychain can report authentication failure for a locked item.
+            XCTAssertTrue([errSecInteractionNotAllowed, errSecAuthFailed].contains(lookupStatus),
+                          "Unexpected Keychain status: \(lookupStatus)")
+            XCTAssertNil(item)
+        }
+    }
+
+    func testKeychainInteractionIsDisabledAndRestoredOnSuccessAndFailure() throws {
+        var original: DarwinBoolean = false
+        XCTAssertEqual(SecKeychainGetUserInteractionAllowed(&original), errSecSuccess)
+        defer { SecKeychainSetUserInteractionAllowed(original.boolValue) }
+
+        enum TestFailure: Error { case expected }
+        for allowed in [true, false] {
+            XCTAssertEqual(SecKeychainSetUserInteractionAllowed(allowed), errSecSuccess)
+            for shouldThrow in [false, true] {
+                do {
+                    try withUsageKeychainInteractionDisabled {
+                        var duringLookup: DarwinBoolean = true
+                        XCTAssertEqual(SecKeychainGetUserInteractionAllowed(&duringLookup), errSecSuccess)
+                        XCTAssertFalse(duringLookup.boolValue)
+                        if shouldThrow { throw TestFailure.expected }
+                    }
+                    XCTAssertFalse(shouldThrow)
+                } catch TestFailure.expected {
+                    XCTAssertTrue(shouldThrow)
+                }
+                var restored: DarwinBoolean = false
+                XCTAssertEqual(SecKeychainGetUserInteractionAllowed(&restored), errSecSuccess)
+                XCTAssertEqual(restored.boolValue, allowed)
+            }
+        }
+    }
+
     func testProviderSelectionAndHelp() throws {
         for arguments in [["usage"], ["usage", "all"], ["usage", "codex"], ["usage", "claude"]] {
             guard case .usageLimits(let providers) = try parse(arguments: arguments) else {
