@@ -1,15 +1,18 @@
 import Foundation
-import Security
-import LocalAuthentication
 
 let usageLimitsHelpText = """
 Usage:
   brrainztools usage [codex|claude|all]
+  brrainztools usage claude login
+  brrainztools usage claude login --complete
 
-Fetch live subscription limits using existing Codex/Claude login credentials.
+Fetch live subscription limits. Codex uses its existing file-based login.
+Claude uses ~/.brrainztools/auth.json; run the login command to authorize once.
+The login command returns a browser URL; --complete reads code#state from stdin.
+Claude tokens refresh automatically. No Keychain access or API keys.
 Defaults to all. JSON data.providers contains status, windows, and any error.
 Percentages describe account allowance, not token counts. Reset times are UTC.
-Each request times out after 20 seconds. No login, refresh, retries, or prompts.
+Each request times out after 20 seconds. Polling never opens login or permission prompts.
 Exit 0 when all requested providers succeed; exit 1 if any are unavailable.
 Provider failures remain in the JSON result on stdout, including partial results.
 """
@@ -64,8 +67,9 @@ struct UsageReport: Encodable {
     var succeeded: Bool { providers.allSatisfy { $0.status == "ok" } }
 }
 
-private struct UsageFailure: Error {
+struct UsageFailure: LocalizedError {
     let message: String
+    var errorDescription: String? { message }
 }
 
 private struct UsageCredential: Decodable {
@@ -73,68 +77,27 @@ private struct UsageCredential: Decodable {
         let access_token: String?
         let account_id: String?
     }
-    struct OAuth: Decodable { let accessToken: String? }
     let tokens: Tokens?
     let access_token: String?
     let account_id: String?
-    let claudeAiOauth: OAuth?
 }
 
-// LAContext alone does not suppress file-based Keychain authorization dialogs.
-// Keep this synchronous: the interaction setting applies to the whole process.
-func withUsageKeychainInteractionDisabled<T>(_ operation: () throws -> T) throws -> T {
-    var previouslyAllowed: DarwinBoolean = false
-    guard SecKeychainGetUserInteractionAllowed(&previouslyAllowed) == errSecSuccess,
-          SecKeychainSetUserInteractionAllowed(false) == errSecSuccess else {
-        throw UsageFailure(message: "Could not disable Keychain interaction; credential lookup skipped.")
-    }
-    defer { SecKeychainSetUserInteractionAllowed(previouslyAllowed.boolValue) }
-    return try operation()
-}
-
-private func usageCredential(_ provider: UsageProvider) throws -> (token: String, account: String?) {
+private func usageCredential(_ provider: UsageProvider, session: URLSession) async throws -> (token: String, account: String?) {
+    if provider == .claude { return (try await loadClaudeUsageToken(session: session), nil) }
     let home = FileManager.default.homeDirectoryForCurrentUser
     let environment = ProcessInfo.processInfo.environment
-    var keychainStatus: OSStatus?
-    if provider == .claude {
-        // Polling must never open a Keychain authorization dialog.
-        let context = LAContext()
-        context.interactionNotAllowed = true
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Claude Code-credentials",
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseAuthenticationContext as String: context,
-        ]
-        var item: CFTypeRef?
-        keychainStatus = try withUsageKeychainInteractionDisabled {
-            SecItemCopyMatching(query as CFDictionary, &item)
-        }
-        if keychainStatus == errSecSuccess,
-           let data = item as? Data,
-           let credential = try? JSONDecoder().decode(UsageCredential.self, from: data),
-           let token = credential.claudeAiOauth?.accessToken, !token.isEmpty {
-            return (token, nil)
-        }
-    }
-    let directory = environment[provider == .codex ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"]
+    let directory = environment["CODEX_HOME"]
         .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-        ?? home.appendingPathComponent(provider == .codex ? ".codex" : ".claude")
-    let file = directory.appendingPathComponent(provider == .codex ? "auth.json" : ".credentials.json")
+        ?? home.appendingPathComponent(".codex")
+    let file = directory.appendingPathComponent("auth.json")
     if let data = try? Data(contentsOf: file),
        let credential = try? JSONDecoder().decode(UsageCredential.self, from: data) {
-        let token = provider == .codex
-            ? credential.tokens?.access_token ?? credential.access_token
-            : credential.claudeAiOauth?.accessToken
+        let token = credential.tokens?.access_token ?? credential.access_token
         if let token, !token.isEmpty {
-            return (token, provider == .codex ? credential.tokens?.account_id ?? credential.account_id : nil)
+            return (token, credential.tokens?.account_id ?? credential.account_id)
         }
     }
-    if let keychainStatus, keychainStatus != errSecSuccess, keychainStatus != errSecItemNotFound {
-        throw UsageFailure(message: "Claude Keychain credential could not be read silently (OSStatus \(keychainStatus)); no readable credential file was found. Check that the Keychain is unlocked and BrrainzTools is authorized for 'Claude Code-credentials' in Keychain Access before polling again.")
-    }
-    throw UsageFailure(message: "No readable OAuth credential. Run '\(provider == .codex ? "codex login" : "claude auth login")'.")
+    throw UsageFailure(message: "No readable Codex OAuth credential. Run 'codex login'.")
 }
 
 private struct CodexUsage: Decodable {
@@ -221,7 +184,7 @@ func pollUsage(_ providers: [UsageProvider]) async -> UsageReport {
         var windows: [UsageWindow] = []
         var failure: String?
         do {
-            let credential = try usageCredential(provider)
+            let credential = try await usageCredential(provider, session: session)
             var request = URLRequest(url: provider.endpoint)
             request.setValue("Bearer \(credential.token)", forHTTPHeaderField: "Authorization")
             if provider == .codex {

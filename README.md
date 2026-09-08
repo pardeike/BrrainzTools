@@ -69,11 +69,33 @@ remaining in all applicable windows, or an explicit user override. Back off on
 HTTP 429 and pause further substantial work when allowance cannot be established.
 Other sessions share the allowance, so polling cannot guarantee a reserve.
 
-Codex reads `auth.json` under `CODEX_HOME` or `~/.codex`. Claude reads the existing
-`Claude Code-credentials` Keychain entry without prompting, then falls back to
-`.credentials.json` under `CLAUDE_CONFIG_DIR` or `~/.claude`. Missing or inaccessible
-credentials require signing in through the corresponding CLI. Polling does not
-refresh credentials or open permission dialogs.
+Codex reads `auth.json` under `CODEX_HOME` or `~/.codex`.
+Claude uses a separate file-based subscription login in `~/.brrainztools/auth.json`.
+No Keychain lookup, Claude Code credential copying, or API key is involved.
+The auth directory is private to your user, mode 0700; token files use mode 0600.
+
+Authorize Claude once:
+
+```bash
+brrainztools usage claude login
+# Open data.authorizationURL from the JSON result in your browser and authorize.
+brrainztools usage claude login --complete
+# Paste the browser's complete code#state when prompted, then press Return.
+brrainztools usage claude
+```
+
+The login requests `user:profile` access for usage reporting. Pending login state
+expires after 30 minutes. Authorization codes are read from stdin, never command
+arguments, and tokens are never included in output. Claude Code's login remains
+separate. A regular API key or an inference-only `claude setup-token` credential
+cannot replace this usage login.
+
+Polling refreshes the stored OAuth credential when it expires within 60 seconds.
+A file lock prevents concurrent agents from rotating the same refresh token, and
+successful refreshes are saved atomically. Failed refreshes preserve the existing
+file and return an error without retries. If another process holds the lock, poll
+again after it finishes. Revoked or expired authorization requires a new login.
+Polling never opens browser login or permission dialogs.
 
 Each provider request has a 20-second timeout. Exit status is 0 when all requested
 providers succeed, or 1 when any is unavailable. Provider failures appear in the

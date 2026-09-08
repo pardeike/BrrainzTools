@@ -25,6 +25,9 @@ struct BrrainzTools {
                 print(text)
             case .showVersion:
                 print(try basicEnvelopeJSON(mode: "version"))
+            case .claudeUsageLogin(let complete):
+                let result = try await handleClaudeUsageLogin(complete: complete)
+                print(try dataEnvelopeJSON(mode: "usage.login", dataJSON: encodeJSON(result)))
             case .usageLimits(let providers):
                 let report = await pollUsage(providers)
                 print(try dataEnvelopeJSON(mode: "usage", dataJSON: encodeJSON(report)))
@@ -140,6 +143,7 @@ enum CommandBehavior: Sendable {
     case showVersion
     case doctor
     case usageLimits([UsageProvider])
+    case claudeUsageLogin(complete: Bool)
     case clipboard(ClipboardCommand)
     case revealFile(RevealCommand)
     case openFile(OpenFileCommand)
@@ -159,7 +163,7 @@ enum CommandBehavior: Sendable {
 
     var shouldSynchronizeAgentSupport: Bool {
         switch self {
-        case .showHelp, .showHelpText, .showVersion, .doctor, .clipboard, .listDisplays, .usageLimits:
+        case .showHelp, .showHelpText, .showVersion, .doctor, .clipboard, .listDisplays, .usageLimits, .claudeUsageLogin:
             return false
         case .revealFile, .openFile, .askImage, .activateApplication, .launchApplication, .quitApplication, .findApps, .asciiArt, .capture, .captureVisibleWindow, .listWindows, .listVisibleWindows, .inspectAccessibility, .menuBar:
             return true
@@ -3722,6 +3726,8 @@ private func parseSubcommand(arguments: [String]) throws -> CommandBehavior? {
     case "displays":
         return try parseDisplaysSubcommand(arguments: trailingArguments)
     case "usage":
+        if trailingArguments == ["claude", "login"] { return .claudeUsageLogin(complete: false) }
+        if trailingArguments == ["claude", "login", "--complete"] { return .claudeUsageLogin(complete: true) }
         if isHelpRequest(trailingArguments) { return .showHelpText(usageLimitsHelpText) }
         if trailingArguments.isEmpty || trailingArguments == ["all"] {
             return .usageLimits(UsageProvider.allCases)
