@@ -228,7 +228,14 @@ Release packaging and notarization are documented in
 
 ## Project verification and delivery
 
-Run `Scripts/verify.sh` for focused usage, authentication and forecast tests.
+Run `Scripts/verify.sh` for focused usage, authentication, forecast and doctor tests.
+Set `TEST_FILTER` to select another Swift test filter.
+
+`doctor` resolves macOS process responsibility instead of assuming the parent
+shell owns permissions. `hostProcess` includes the name, PID, executable path
+and bundle ID when available. `attribution` is `macOS-responsibility` or
+`parent-fallback`; the latter is explicitly unconfirmed. The private macOS API
+is loaded dynamically and does not expose per-service TCC policy.
 Run `Scripts/install.sh` to build, sign, install locally and verify live Codex usage.
 The installer preserves the existing Apple Development signing convention;
 `CODESIGN_IDENTITY` can select another explicit identity.

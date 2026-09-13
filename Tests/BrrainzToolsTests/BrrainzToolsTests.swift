@@ -2950,6 +2950,28 @@ final class BrrainzToolsTests: XCTestCase {
         XCTAssertNil(stringifyAXAttributeValue(["unsupported"]))
     }
 
+    func testDoctorUsesResponsibleProcessInsteadOfShellParent() {
+        let result = doctorHostProcess(responsiblePID: 42, parentPID: 99) { pid in
+            XCTAssertEqual(pid, 42)
+            return DoctorHostProcess(processID: pid, name: "Codex",
+                                     bundleIdentifier: "com.openai.codex",
+                                     executablePath: "/Applications/Codex.app/Contents/MacOS/Codex")
+        }
+        XCTAssertEqual(result.attribution, "macOS-responsibility")
+        XCTAssertEqual(result.name, "Codex")
+        XCTAssertNotNil(result.executablePath)
+    }
+
+    func testDoctorMarksUnavailableResponsibilityAsParentFallback() {
+        for pid: pid_t? in [nil, 0, -1] {
+            let result = doctorHostProcess(responsiblePID: pid, parentPID: 99) { parent in
+                XCTAssertEqual(parent, 99)
+                return DoctorHostProcess(processID: parent, name: "zsh", bundleIdentifier: nil)
+            }
+            XCTAssertEqual(result.attribution, "parent-fallback")
+        }
+    }
+
     func testDoctorStatusEncodesPermissionAndHostState() throws {
         let response = doctorStatus(
             screenRecordingAccess: { true },
@@ -2966,7 +2988,7 @@ final class BrrainzToolsTests: XCTestCase {
 
         XCTAssertEqual(
             try encodeJSON(response),
-            #"{"accessibility":false,"hostProcess":{"bundleIdentifier":"com.googlecode.iterm2","name":"iTerm2","processID":42},"screenRecording":true,"version":"1.2.3"}"#
+            #"{"accessibility":false,"hostProcess":{"attribution":"unavailable","bundleIdentifier":"com.googlecode.iterm2","name":"iTerm2","processID":42},"screenRecording":true,"version":"1.2.3"}"#
         )
     }
 

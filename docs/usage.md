@@ -69,8 +69,13 @@ brrainztools doctor
 ```
 
 `doctor` returns non-prompting Screen Recording and Accessibility permission
-status, the BrrainzTools version, and the parent host process that macOS
-permissions apply to.
+status, the BrrainzTools version, and macOS's responsible process. `hostProcess`
+contains its PID, name, executable path and bundle ID when available.
+`attribution: "macOS-responsibility"` identifies a successful OS lookup;
+`"parent-fallback"` means responsibility was unavailable and the parent is only
+context, not a confirmed permission owner. The lookup uses a dynamically loaded
+private libSystem API, also used by [Chromium](https://chromium.googlesource.com/chromium/src/+/24aa2a50ac03698e7ec5a11251a615b965f5874d/base/process/process_info_mac.cc).
+It reports process responsibility, not per-service TCC policy or database entries.
 
 ## Clipboard
 

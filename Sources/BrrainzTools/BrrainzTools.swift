@@ -768,6 +768,8 @@ struct DoctorHostProcess: Encodable, Equatable {
     let processID: Int32
     let name: String
     let bundleIdentifier: String?
+    var executablePath: String? = nil
+    var attribution: String = "unavailable"
 }
 
 struct ClipboardResponse: Encodable {
@@ -1621,7 +1623,10 @@ Usage:
   brrainztools doctor
 
 Checks Screen Recording and Accessibility permission status without prompting,
-and reports the host process that macOS permissions apply to.
+and reports macOS process responsibility with the executable path and bundle ID
+when available. hostProcess.attribution is macOS-responsibility when resolved,
+or parent-fallback when responsibility is unavailable. A fallback is not a
+confirmed permission owner; responsibility does not expose per-service TCC rules.
 """
 
 private let clipboardHelpText = """
@@ -1862,14 +1867,37 @@ func doctorStatus(
 }
 
 private func currentHostProcess() -> DoctorHostProcess {
-    let parentProcessID = getppid()
-    let runningApplication = NSRunningApplication(processIdentifier: parentProcessID)
+    // This private libSystem API is also used by Chromium. Resolve it at runtime
+    // so a missing symbol produces an explicit fallback, not a launch failure.
+    typealias ResponsibilityFunction = @convention(c) (pid_t) -> pid_t
+    let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2),
+                       "responsibility_get_pid_responsible_for_pid")
+    let responsiblePID = symbol.map {
+        unsafeBitCast($0, to: ResponsibilityFunction.self)(getpid())
+    }
+    return doctorHostProcess(responsiblePID: responsiblePID, parentPID: getppid()) { pid in
+        let app = NSRunningApplication(processIdentifier: pid)
+        var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        let path = length > 0 ? String(cString: buffer) : app?.executableURL?.path
+        return DoctorHostProcess(
+            processID: pid,
+            name: app?.localizedName ?? path.map { URL(fileURLWithPath: $0).lastPathComponent }
+                ?? "unknown process",
+            bundleIdentifier: app?.bundleIdentifier,
+            executablePath: path
+        )
+    }
+}
 
-    return DoctorHostProcess(
-        processID: parentProcessID,
-        name: runningApplication?.localizedName ?? "pid \(parentProcessID)",
-        bundleIdentifier: runningApplication?.bundleIdentifier
-    )
+func doctorHostProcess(
+    responsiblePID: pid_t?, parentPID: pid_t,
+    identify: (pid_t) -> DoctorHostProcess
+) -> DoctorHostProcess {
+    let confirmed = responsiblePID.map { $0 > 0 } ?? false
+    var result = identify(confirmed ? responsiblePID! : parentPID)
+    result.attribution = confirmed ? "macOS-responsibility" : "parent-fallback"
+    return result
 }
 
 func handleClipboard(using command: ClipboardCommand) throws -> String {
