@@ -15,6 +15,9 @@ Percentages describe account allowance, not token counts. Reset times are UTC.
 Each request times out after 20 seconds. Polling never opens login or permission prompts.
 Exit 0 when all requested providers succeed; exit 1 if any are unavailable.
 Provider failures remain in the JSON result on stdout, including partial results.
+Codex weekly windows include forecasts from local iCloud-synced TokenCoffee history.
+Forecast status is separate from provider status; Claude and model limits have no forecast.
+BRRAINZTOOLS_TOKENCOFFEE_DIRECTORY overrides the TokenCoffee data directory.
 """
 
 enum UsageProvider: String, CaseIterable, Sendable, Codable {
@@ -35,9 +38,10 @@ struct UsageWindow: Encodable {
     let resetsAt: String?
     let resetsInSeconds: Double?
     let lockedReason: String?
+    var forecast: UsageForecast? = nil
 
     enum CodingKeys: String, CodingKey {
-        case name, usedPercent, remainingPercent, windowSeconds, resetsAt, resetsInSeconds, lockedReason
+        case name, usedPercent, remainingPercent, windowSeconds, resetsAt, resetsInSeconds, lockedReason, forecast
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -49,6 +53,7 @@ struct UsageWindow: Encodable {
         try container.encodeIfPresent(resetsAt, forKey: .resetsAt)
         try container.encodeIfPresent(resetsInSeconds, forKey: .resetsInSeconds)
         try container.encodeIfPresent(lockedReason, forKey: .lockedReason)
+        try container.encodeIfPresent(forecast, forKey: .forecast)
     }
 }
 
@@ -201,6 +206,9 @@ func pollUsage(_ providers: [UsageProvider]) async -> UsageReport {
             }
             guard response.statusCode == 200 else { throw UsageFailure(message: usageHTTPError(response.statusCode)) }
             (plan, windows) = try parseUsageData(data, provider: provider)
+            if provider == .codex {
+                windows = addTokenCoffeeForecasts(to: windows, plan: plan, now: Date())
+            }
         } catch let error as UsageFailure {
             failure = error.message
         } catch is DecodingError {

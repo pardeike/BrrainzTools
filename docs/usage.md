@@ -46,21 +46,21 @@ brrainztools --version
 
 ## Subscription usage
 
-`brrainztools usage claude` and `brrainztools usage codex` read existing login
-credentials and return account allowance as JSON. Neither command starts login,
-refreshes credentials, or displays password/authorization dialogs. If credentials
-cannot be read silently, the provider reports `status: unavailable` and the
-command exits with status 1.
+`brrainztools usage [codex|claude|all]` returns live subscription allowance in
+`data.providers`. Codex uses its existing file login; Claude uses the separate
+`~/.brrainztools/auth.json` login, refreshing that credential automatically.
+Polling does not access Keychain or open authorization dialogs.
 
-Codex reads `auth.json` under `CODEX_HOME`, or `~/.codex` by default. Claude first
-reads `Claude Code-credentials` from Keychain, then falls back to
-`.credentials.json` under `CLAUDE_CONFIG_DIR`, or `~/.claude` by default.
+Codex account-wide weekly windows include a TokenCoffee-backed `forecast`.
+It reports optimistic/pessimistic usage at reset and UTC timestamps for reaching
+100%, plus the recent consumption rate in percentage points per hour. A null
+crossing means that scenario does not exhaust before reset. Forecast status and
+history/sync freshness are separate from provider success. Claude, five-hour
+windows and additional model windows have no forecast.
 
-If Claude reports a Keychain access error, unlock the relevant Keychain and, if
-needed, use Keychain Access to add the installed `brrainztools` executable to the
-item's always-allowed applications under Access Control. Saving that permission
-may require your password once. Polling cannot grant itself access. Keep the
-permission specific to BrrainzTools.
+See [subscription limits and forecast requirements](../README.md#agent-subscription-limits)
+for login, history locations, account matching, evidence requirements and JSON
+field meanings.
 
 ## Doctor
 

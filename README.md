@@ -58,6 +58,37 @@ includes its plan and additional model limits; Claude includes reported weekly
 model limits. Percentages apply to the signed-in account, not individual agents,
 and cannot be converted into a remaining token count.
 
+Codex account-wide weekly windows also include `forecast`, using TokenCoffee's
+local copy of its iCloud-synced history and its adjusted graph forecast model.
+The optimistic/pessimistic scenarios report `usedPercentAtReset` and
+`reaches100At`, with an explicit null when 100% is not reached before reset.
+`recentRatePercentPointsPerHour` measures recent consumption, including idle time;
+`recentRateSpanSeconds` gives the observation period. These are scenarios, not
+statistical confidence bounds. There is no angle tied to chart dimensions.
+
+Forecasts require at least three matching samples spanning one hour, an observed
+usage increase, and a latest sample no older than 30 minutes. `status` is `ok`,
+`exhausted`, `insufficient_history`, `stale_history`, or `unavailable`; missing
+forecasts do not change provider success or the live allowance. `reason` explains
+missing or inconsistent history. `latestSampleAt`, `lastSuccessfulSyncAt`,
+`syncCaughtUp`, `sampleCount`, and `historySpanSeconds` describe the evidence when
+available. A current percentage of 100 or more reports `exhausted` immediately;
+its crossing timestamp means observed exhausted now, not the historical first hit.
+
+TokenCoffee remains responsible for polling and iCloud sync. BrrainzTools only
+reads `quota-samples.jsonl` and selected sync metadata; it never changes the app's
+data or starts a cloud sync. It prefers the installed app's sandbox under
+`~/Library/Containers/com.pardeike.TokenCoffee/Data/Library/Application Support/TokenCoffee`.
+If the container does not exist, it uses `~/Library/Application Support/TokenCoffee`.
+Set `BRRAINZTOOLS_TOKENCOFFEE_DIRECTORY` to select an explicit data directory.
+A sandbox access failure does not silently select an older development store.
+
+The current TokenCoffee sample format has no account ID. Forecast JSON explicitly
+reports `accountMatch: "unverified"`; matching limit, plan, reset and nondecreasing
+usage does not establish account identity. Use the same Codex account in both
+apps. Additional model limits, five-hour limits and Claude have no forecast.
+See [forecast source provenance](docs/tokencoffee-forecast-source.md).
+
 The shipped agent skill and managed AGENTS instructions tell models to poll at
 the start of substantial work, before spawning parallel agents, and after a
 usage-limit interruption. During sustained work, check at meaningful checkpoints
@@ -194,3 +225,24 @@ If the support files are missing, the binary skips this step and still works.
 
 Release packaging and notarization are documented in
 [docs/release.md](docs/release.md).
+
+## Project verification and delivery
+
+Run `Scripts/verify.sh` for focused usage, authentication and forecast tests.
+Run `Scripts/install.sh` to build, sign, install locally and verify live Codex usage.
+The installer preserves the existing Apple Development signing convention;
+`CODESIGN_IDENTITY` can select another explicit identity.
+
+To deploy that same signed binary and support files to a remote Mac, with hash,
+signature and installed usage verification:
+
+```bash
+REMOTE_HOST=mba REMOTE_ADDRESS=10.10.9.3 REMOTE_HOST_KEY_ALIAS=mba.home.arpa Scripts/install.sh
+```
+
+These workflows print only `ok` on success. Full output goes to ignored
+`.build/logs/` files. Failures report the failed step, diagnostics and log path.
+They do not commit, push or publish anything. A live provider login is required
+for delivery verification. Set `REQUIRE_CODEX_FORECAST=1` to require an available forecast during delivery
+verification. Forecast status is reported in the log, including
+missing history or a macOS denial of access to TokenCoffee's sandbox.
