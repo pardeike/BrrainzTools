@@ -72,6 +72,9 @@ else
 fi
 
 run_step 'installed Codex usage verification' python3 "$project_dir/Scripts/verify-usage.py" "$target_path"
+if [[ "${VERIFY_CLAUDE_USAGE:-0}" == 1 ]]; then
+  run_step 'installed Claude usage verification' python3 "$project_dir/Scripts/verify-usage.py" "$target_path" claude
+fi
 
 if [[ -n "${REMOTE_HOST:-}" ]]; then
   run_step 'remote installation and verification' "$project_dir/Scripts/install-remote.sh" "$target_path" "$support_root_dir" "$REMOTE_HOST"

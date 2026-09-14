@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import XCTest
 @testable import BrrainzTools
 
@@ -133,6 +134,96 @@ final class UsageForecastTests: XCTestCase {
                        container.appendingPathComponent("Data/Library/Application Support/TokenCoffee"))
         XCTAssertEqual(tokenCoffeeDirectory(home: home, environment: ["BRRAINZTOOLS_TOKENCOFFEE_DIRECTORY": "/tmp/explicit"]),
                        URL(fileURLWithPath: "/tmp/explicit", isDirectory: true))
+    }
+
+    func testLinkedClaudeHistoryIsPartitionedByAccountAndScope() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = directory.appendingPathComponent("multi-account")
+        let account = UUID()
+        let historyDirectory = root.appendingPathComponent("diagram-history/" + account.uuidString)
+        try FileManager.default.createDirectory(at: historyDirectory, withIntermediateDirectories: true)
+        func registry(_ ids: [UUID]) throws {
+            let object = ["accounts": ids.map { ["id": $0.uuidString, "provider": "Claude", "identity": $0 == account ? "live-claude" : "other-claude"] }]
+            try JSONSerialization.data(withJSONObject: object).write(to: root.appendingPathComponent("accounts.json"))
+        }
+        try registry([account])
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        for scope in ["general", "model:fable"] {
+            var data = Data()
+            for sample in samples() {
+                data.append(try encoder.encode(QuotaSample(capturedAt: sample.capturedAt, limitId: scope,
+                    limitName: nil, weeklyUsedPercent: sample.weeklyUsedPercent, weeklyWindowMinutes: 10080,
+                    weeklyResetsAt: reset, planType: nil)))
+                data.append(10)
+            }
+            let filename = SHA256.hash(data: Data(scope.utf8)).map { String(format: "%02x", $0) }.joined()
+            try data.write(to: historyDirectory.appendingPathComponent(filename + ".jsonl"))
+        }
+        let windows = [window(name: "seven_day"), window(name: "model:fable"),
+                       window(name: "five_hour", seconds: 18000), window(name: "seven_day_sonnet")]
+        func read(_ environment: [String: String] = [:]) -> [UsageWindow] {
+            addTokenCoffeeForecasts(to: windows, plan: nil, now: now, directory: directory,
+                                   provider: .claude, accountIdentity: "live-claude", environment: environment)
+        }
+        XCTAssertEqual(read()[0].forecast?.status, "ok")
+        XCTAssertEqual(read()[1].forecast?.status, "ok")
+        XCTAssertEqual(read()[0].forecast?.accountMatch, "verified")
+        XCTAssertNil(read()[2].forecast)
+        XCTAssertNil(read()[3].forecast)
+        let otherAccount = UUID()
+        try registry([account, otherAccount])
+        XCTAssertEqual(read()[0].forecast?.status, "ok", "Identity selects the correct account automatically")
+        XCTAssertEqual(read(["BRRAINZTOOLS_TOKENCOFFEE_CLAUDE_ACCOUNT": account.uuidString])[0].forecast?.status, "ok")
+        XCTAssertEqual(read(["BRRAINZTOOLS_TOKENCOFFEE_CLAUDE_ACCOUNT": otherAccount.uuidString])[0].forecast?.reason, "no_matching_account")
+        let unverified = addTokenCoffeeForecasts(to: windows, plan: nil, now: now, directory: directory,
+            provider: .claude, environment: ["BRRAINZTOOLS_TOKENCOFFEE_CLAUDE_ACCOUNT": account.uuidString])
+        XCTAssertEqual(unverified[0].forecast?.reason, "account_identity_unverified")
+        XCTAssertNil(unverified[0].forecast?.optimistic)
+        XCTAssertEqual(read(["BRRAINZTOOLS_TOKENCOFFEE_CLAUDE_ACCOUNT": UUID().uuidString])[0].forecast?.reason, "no_matching_account")
+        let codex = addTokenCoffeeForecasts(to: [window()], plan: "pro", now: now, directory: directory,
+                                           accountIdentity: "different", environment: [:])
+        XCTAssertEqual(codex[0].forecast?.reason, "no_matching_account")
+        let codexRegistry = ["accounts": [["id": account.uuidString, "provider": "Codex", "identity": "live-account"]]]
+        try JSONSerialization.data(withJSONObject: codexRegistry).write(to: root.appendingPathComponent("accounts.json"))
+        var codexData = Data()
+        for sample in samples() { codexData.append(try encoder.encode(sample)); codexData.append(10) }
+        let general = SHA256.hash(data: Data("general".utf8)).map { String(format: "%02x", $0) }.joined()
+        try codexData.write(to: historyDirectory.appendingPathComponent(general + ".jsonl"))
+        let verified = addTokenCoffeeForecasts(to: [window()], plan: "pro", now: now, directory: directory,
+            accountIdentity: "live-account", environment: [:])
+        XCTAssertEqual(verified[0].forecast?.status, "ok")
+        XCTAssertEqual(verified[0].forecast?.accountMatch, "verified")
+        let unknownCodex = addTokenCoffeeForecasts(to: [window()], plan: "pro", now: now, directory: directory,
+            environment: [:])
+        XCTAssertEqual(unknownCodex[0].forecast?.reason, "account_identity_unverified")
+        let mismatch = addTokenCoffeeForecasts(to: [window()], plan: "pro", now: now, directory: directory,
+            accountIdentity: "wrong-account", environment: ["BRRAINZTOOLS_TOKENCOFFEE_CODEX_ACCOUNT": account.uuidString])
+        XCTAssertEqual(mismatch[0].forecast?.reason, "no_matching_account")
+    }
+
+    func testFractionalResetMatchesRoundedTokenCoffeeHistory() {
+        let base = window()
+        let fractional = UsageWindow(name: base.name, usedPercent: base.usedPercent, windowSeconds: base.windowSeconds,
+            resetsAt: ISO8601DateFormatter().string(from: reset.addingTimeInterval(-2)).replacingOccurrences(of: "Z", with: ".672Z"), resetsInSeconds: nil, lockedReason: nil)
+        XCTAssertEqual(makeUsageForecast(window: fractional, plan: "pro", history: history(), now: now).status, "ok")
+    }
+
+    func testFreshRejectedSamplesAreDistinguishedFromStoppedCollection() {
+        let old = Array(samples().dropLast(2))
+        let stopped = forecast(old)
+        XCTAssertEqual(stopped.status, "stale_history")
+        XCTAssertEqual(stopped.reason, "no_recent_samples")
+        let foreign = QuotaSample(capturedAt: now, limitId: "codex", limitName: nil,
+            weeklyUsedPercent: 40, weeklyWindowMinutes: 10080, weeklyResetsAt: reset.addingTimeInterval(6), planType: "pro")
+        let mismatched = forecast(old + [foreign])
+        XCTAssertEqual(mismatched.status, "stale_history")
+        XCTAssertEqual(mismatched.reason, "fresh_samples_do_not_match")
+        XCTAssertEqual(mismatched.newestStoredSampleAt, ISO8601DateFormatter().string(from: now))
+        XCTAssertEqual(mismatched.latestSampleAt, ISO8601DateFormatter().string(from: old.last!.capturedAt))
+        XCTAssertEqual(mismatched.rejectedSampleCount, 1)
+        XCTAssertNil(mismatched.optimistic)
     }
 
 }

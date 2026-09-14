@@ -58,7 +58,7 @@ includes its plan and additional model limits; Claude includes reported weekly
 model limits. Percentages apply to the signed-in account, not individual agents,
 and cannot be converted into a remaining token count.
 
-Codex account-wide weekly windows also include `forecast`, using TokenCoffee's
+Codex account-wide and Claude general and scoped model weekly windows include `forecast`, using TokenCoffee's
 local copy of its iCloud-synced history and its adjusted graph forecast model.
 The optimistic/pessimistic scenarios report `usedPercentAtReset` and
 `reaches100At`, with an explicit null when 100% is not reached before reset.
@@ -75,18 +75,41 @@ missing or inconsistent history. `latestSampleAt`, `lastSuccessfulSyncAt`,
 available. A current percentage of 100 or more reports `exhausted` immediately;
 its crossing timestamp means observed exhausted now, not the historical first hit.
 
+Reset timestamps match within five seconds, using TokenCoffee's history contract.
+`newestStoredSampleAt` reports the newest sample in the selected history file;
+`latestSampleAt` reports the newest sample matching the live limit, reset and plan.
+`rejectedSampleCount` counts samples excluded by those filters and cycle/time bounds,
+not corrupt samples. A stale result distinguishes `no_recent_samples` from
+`fresh_samples_do_not_match`. Recent iCloud sync alone does not prove fresh usage.
+
 TokenCoffee remains responsible for polling and iCloud sync. BrrainzTools only
-reads `quota-samples.jsonl` and selected sync metadata; it never changes the app's
+reads account metadata, per-scope JSONL history and selected sync metadata; it never changes the app's
 data or starts a cloud sync. It prefers the installed app's sandbox under
 `~/Library/Containers/com.pardeike.TokenCoffee/Data/Library/Application Support/TokenCoffee`.
 If the container does not exist, it uses `~/Library/Application Support/TokenCoffee`.
 Set `BRRAINZTOOLS_TOKENCOFFEE_DIRECTORY` to select an explicit data directory.
 A sandbox access failure does not silently select an older development store.
 
-The current TokenCoffee sample format has no account ID. Forecast JSON explicitly
-reports `accountMatch: "unverified"`; matching limit, plan, reset and nondecreasing
-usage does not establish account identity. Use the same Codex account in both
-apps. Additional model limits, five-hour limits and Claude have no forecast.
+TokenCoffee's `multi-account/accounts.json` selects histories under
+`multi-account/diagram-history/<account UUID>/<SHA256 of scope>.jsonl`.
+Codex matches its live login account identity and reports `accountMatch: "verified"`.
+Claude fetches its organization/account UUID pair from its authenticated profile,
+caches it with its own credential, and also reports `accountMatch: "verified"`.
+Existing credentials discover identity on their next poll without another login.
+Both providers select the matching account automatically, even with several linked
+accounts. `BRRAINZTOOLS_TOKENCOFFEE_CLAUDE_ACCOUNT` and
+`BRRAINZTOOLS_TOKENCOFFEE_CODEX_ACCOUNT` can restrict selection to an account UUID;
+neither can override an identity mismatch. BrrainzTools never combines accounts.
+If Claude's profile cannot be verified, live allowance reporting still works,
+but forecasts return `account_identity_unverified` instead of guessing an account.
+Missing or ambiguous accounts produce an unavailable forecast without affecting
+live allowance reporting. Sync metadata is omitted if both cloud environments exist.
+
+Older TokenCoffee installations without an account registry retain the legacy
+Codex history path and `accountMatch: "unverified"`. Five-hour windows, Codex model
+limits and legacy Claude `seven_day_*` model fields have no forecast. Claude's
+new `limits` model scopes appear as `model:<id>` or `model-name:<lowercase title>`,
+matching TokenCoffee, including scopes reported with `is_active: false`.
 See [forecast source provenance](docs/tokencoffee-forecast-source.md).
 
 The shipped agent skill and managed AGENTS instructions tell models to poll at
@@ -230,6 +253,9 @@ Release packaging and notarization are documented in
 
 Run `Scripts/verify.sh` for focused usage, authentication, forecast and doctor tests.
 Set `TEST_FILTER` to select another Swift test filter.
+Use `TEST_FILTER=. Scripts/verify.sh` for all tests. Set
+`TOKENCOFFEE_SOURCE_DIRECTORY` to a TokenCoffee checkout to additionally verify
+that the vendored history contract and its tests match upstream exactly.
 
 `doctor` resolves macOS process responsibility instead of assuming the parent
 shell owns permissions. `hostProcess` includes the name, PID, executable path
@@ -237,6 +263,8 @@ and bundle ID when available. `attribution` is `macOS-responsibility` or
 `parent-fallback`; the latter is explicitly unconfirmed. The private macOS API
 is loaded dynamically and does not expose per-service TCC policy.
 Run `Scripts/install.sh` to build, sign, install locally and verify live Codex usage.
+Use `VERIFY_CLAUDE_USAGE=1 Scripts/install.sh` to also verify Claude after its login
+is configured. Set `REQUIRE_CLAUDE_FORECAST=1` to require a usable Claude forecast.
 The installer preserves the existing Apple Development signing convention;
 `CODESIGN_IDENTITY` can select another explicit identity.
 

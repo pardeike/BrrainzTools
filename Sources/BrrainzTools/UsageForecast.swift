@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 // Read-only subset of TokenCoffee's persisted QuotaSample. No credentials or cloud tokens.
 struct QuotaSample: Codable, Sendable {
@@ -28,11 +29,14 @@ struct UsageForecastScenario: Encodable {
 struct UsageForecast: Encodable {
     var status: String
     let historySource = "tokencoffee"
-    let method = "tokencoffee-e1b47ee-v1"
+    let method = "tokencoffee-e1b47ee-v3"
+    let historyContractVersion = UsageHistoryContract.version
     // TokenCoffee's current sample format has no account identifier.
-    let accountMatch = "unverified"
+    var accountMatch = "unverified"
     var reason: String?
     var latestSampleAt: String?
+    var newestStoredSampleAt: String?
+    var rejectedSampleCount: Int?
     var lastSuccessfulSyncAt: String?
     var syncCaughtUp: Bool?
     var sampleCount: Int?
@@ -48,8 +52,8 @@ struct TokenCoffeeHistory {
     let lastSuccessfulSyncAt: Date?
     let syncCaughtUp: Bool?
 
-    static func load(directory: URL) throws -> TokenCoffeeHistory {
-        let file = directory.appendingPathComponent("quota-samples.jsonl")
+    static func load(directory: URL, filename: String = "quota-samples.jsonl", syncFile: URL? = nil) throws -> TokenCoffeeHistory {
+        let file = directory.appendingPathComponent(filename)
         let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
         guard size <= 32 * 1024 * 1024 else { throw UsageFailure(message: "TokenCoffee history exceeds 32 MB.") }
         let data = try Data(contentsOf: file)
@@ -62,7 +66,7 @@ struct TokenCoffeeHistory {
             let isCaughtUp: Bool?
         }
         let sync = try? decoder.decode(SyncState.self, from: Data(contentsOf:
-            directory.appendingPathComponent("quota-cloud-sync-state.json")))
+            syncFile ?? directory.appendingPathComponent("quota-cloud-sync-state.json")))
         return TokenCoffeeHistory(samples: samples, lastSuccessfulSyncAt: sync?.lastSuccessfulSyncAt,
                                   syncCaughtUp: sync?.isCaughtUp)
     }
@@ -83,27 +87,80 @@ func tokenCoffeeDirectory(home: URL = FileManager.default.homeDirectoryForCurren
     return home.appendingPathComponent(relative)
 }
 
-func addTokenCoffeeForecasts(to windows: [UsageWindow], plan: String?, now: Date,
-                             directory: URL = tokenCoffeeDirectory()) -> [UsageWindow] {
-    // Only TokenCoffee's account-wide weekly history is supported. A provider may
-    // call this primary or secondary; duration, not position, identifies the window.
-    let supported: (UsageWindow) -> Bool = {
-        ["primary", "secondary"].contains($0.name) && $0.windowSeconds == 604800
+// TokenCoffee 77bc2b4 stores each account and scope separately.
+private struct TokenCoffeeAccounts: Decodable {
+    struct Account: Decodable {
+        let id: UUID
+        let provider: String
+        let identity: String?
     }
-    guard windows.contains(where: supported) else { return windows }
-    let history = try? TokenCoffeeHistory.load(directory: directory)
+    let accounts: [Account]
+}
+
+func tokenCoffeeScope(_ window: UsageWindow, provider: UsageProvider) -> String? {
+    guard window.windowSeconds == 604800 else { return nil }
+    if provider == .codex { return ["primary", "secondary"].contains(window.name) ? "general" : nil }
+    if window.name == "seven_day" { return "general" }
+    return window.name.hasPrefix("model:") || window.name.hasPrefix("model-name:") ? window.name : nil
+}
+
+func addTokenCoffeeForecasts(to windows: [UsageWindow], plan: String?, now: Date,
+                             directory: URL = tokenCoffeeDirectory(), provider: UsageProvider = .codex,
+                             accountIdentity: String? = nil,
+                             environment: [String: String] = ProcessInfo.processInfo.environment) -> [UsageWindow] {
+    guard windows.contains(where: { tokenCoffeeScope($0, provider: provider) != nil }) else { return windows }
+    let root = directory.appendingPathComponent("multi-account")
+    let registryFile = root.appendingPathComponent("accounts.json")
+    let linked = FileManager.default.fileExists(atPath: registryFile.path)
+    let registry = try? JSONDecoder().decode(TokenCoffeeAccounts.self, from: Data(contentsOf: registryFile))
+    let selection = environment["BRRAINZTOOLS_TOKENCOFFEE_" + provider.rawValue.uppercased() + "_ACCOUNT"]
+    let accounts = registry?.accounts.filter { account in
+        guard account.provider.lowercased() == provider.rawValue else { return false }
+        if let selection, UUID(uuidString: selection) != account.id { return false }
+        if let accountIdentity { return account.identity == accountIdentity }
+        return true
+    } ?? []
     return windows.map { window in
-        guard supported(window) else { return window }
+        guard let scope = tokenCoffeeScope(window, provider: provider) else { return window }
         var result = window
-        result.forecast = makeUsageForecast(window: window, plan: plan, history: history, now: now)
+        guard !(provider == .claude || linked || selection != nil) || accountIdentity != nil else {
+            result.forecast = UsageForecast(status: "unavailable", reason: "account_identity_unverified")
+            return result
+        }
+        var history: TokenCoffeeHistory?
+        if linked || provider == .claude || selection != nil {
+            guard accounts.count == 1, let account = accounts.first else {
+                result.forecast = UsageForecast(status: "unavailable", reason:
+                    registry == nil ? "account_registry_unreadable" : accounts.isEmpty ? "no_matching_account" : "ambiguous_account")
+                return result
+            }
+            let filename = SHA256.hash(data: Data(scope.utf8)).map { String(format: "%02x", $0) }.joined() + ".jsonl"
+            let accountKey = SHA256.hash(data: Data((account.provider + ":" + (account.identity ?? account.id.uuidString)).utf8))
+                .map { String(format: "%02x", $0) }.joined()
+            let syncKey = SHA256.hash(data: Data((accountKey + ":" + scope).utf8))
+                .map { String(format: "%02x", $0) }.joined()
+            let syncFiles = ["Development", "Production"].map {
+                root.appendingPathComponent("cloud-state/" + $0 + "/" + syncKey + ".json")
+            }.filter { FileManager.default.fileExists(atPath: $0.path) }
+            // Do not attribute sync state from an ambiguous CloudKit environment.
+            history = try? TokenCoffeeHistory.load(directory: root.appendingPathComponent("diagram-history")
+                .appendingPathComponent(account.id.uuidString), filename: filename,
+                syncFile: syncFiles.count == 1 ? syncFiles[0] : nil)
+            result.forecast = makeUsageForecast(window: window, plan: plan, history: history, now: now,
+                limitID: provider == .codex ? "codex" : scope)
+            if let accountIdentity, account.identity == accountIdentity { result.forecast?.accountMatch = "verified" }
+        } else {
+            history = try? TokenCoffeeHistory.load(directory: directory)
+            result.forecast = makeUsageForecast(window: window, plan: plan, history: history, now: now)
+        }
         return result
     }
 }
 
-func makeUsageForecast(window: UsageWindow, plan: String?, history: TokenCoffeeHistory?, now: Date) -> UsageForecast {
+func makeUsageForecast(window: UsageWindow, plan: String?, history: TokenCoffeeHistory?, now: Date, limitID: String = "codex") -> UsageForecast {
     var result = UsageForecast(status: "unavailable")
     let formatter = ISO8601DateFormatter()
-    guard let resetString = window.resetsAt, let reset = formatter.date(from: resetString), reset > now else {
+    guard let resetString = window.resetsAt, let reset = usageResetDate(resetString), reset > now else {
         result.reason = "missing_or_expired_reset"
         return result
     }
@@ -121,14 +178,16 @@ func makeUsageForecast(window: UsageWindow, plan: String?, history: TokenCoffeeH
     }
     result.lastSuccessfulSyncAt = history.lastSuccessfulSyncAt.map(formatter.string)
     result.syncCaughtUp = history.syncCaughtUp
+    result.newestStoredSampleAt = history.samples.map(\.capturedAt).max().map(formatter.string)
     let start = reset.addingTimeInterval(-604800)
     let candidates = history.samples.filter {
-        $0.limitId == "codex" && $0.weeklyWindowMinutes == 10080 &&
-        $0.weeklyResetsAt.map { abs($0.timeIntervalSince(reset)) <= 1 } == true &&
+        $0.limitId == limitID && $0.weeklyWindowMinutes == 10080 &&
+        UsageHistoryContract.matchesReset($0.weeklyResetsAt, live: reset) &&
         (plan == nil || $0.planType == plan) && $0.capturedAt >= start && $0.capturedAt <= now
     }.sorted {
         $0.capturedAt == $1.capturedAt ? $0.weeklyUsedPercent < $1.weeklyUsedPercent : $0.capturedAt < $1.capturedAt
     }
+    result.rejectedSampleCount = history.samples.count - candidates.count
     // Multiple devices may observe the same second. Keep the highest observation.
     var samples: [QuotaSample] = []
     for sample in candidates {
@@ -150,6 +209,9 @@ func makeUsageForecast(window: UsageWindow, plan: String?, history: TokenCoffeeH
     }
     guard now.timeIntervalSince(latest.capturedAt) <= 30 * 60 else {
         result.status = "stale_history"
+        result.reason = history.samples.contains { $0.capturedAt > latest.capturedAt && $0.capturedAt <= now
+            && now.timeIntervalSince($0.capturedAt) <= 30 * 60 }
+            ? "fresh_samples_do_not_match" : "no_recent_samples"
         return result
     }
     guard samples.count >= 3, latest.capturedAt.timeIntervalSince(first.capturedAt) >= 60 * 60 else {

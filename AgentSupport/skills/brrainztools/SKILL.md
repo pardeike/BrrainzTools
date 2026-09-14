@@ -31,13 +31,22 @@ Proactively check your provider's subscription allowance with `brrainztools usag
 
 Output is JSON. Inspect `data.providers[].status` before using `windows[].remainingPercent` and `resetsAt`. `status: unavailable` means the allowance is unknown, not unused. Exit status is 1 if any requested provider is unavailable; stdout still contains successful providers and structured failure details. Windows are account-wide subscription percentages, not remaining tokens or a per-agent allocation. Do not infer token budgets from them. Codex uses its existing file-based login. Claude uses its own `~/.brrainztools/auth.json` credential and refreshes it automatically, without Keychain access. If Claude has no login, run `brrainztools usage claude login` to obtain a browser authorization URL; the user can authorize and run `brrainztools usage claude login --complete`, pasting code#state into stdin. Never request OAuth tokens in chat or put them in command arguments. Polling never opens browser login or permission dialogs. Do not substitute a regular API key or an inference-only setup token for the subscription usage credential.
 
-Codex account-wide weekly windows may include `forecast` from TokenCoffee's
+Codex account-wide and Claude general/scoped-model weekly windows may include `forecast` from TokenCoffee's
 locally synced history. Check `forecast.status` and freshness before using its
 optimistic/pessimistic `reaches100At` and `usedPercentAtReset` scenarios. A null
 crossing means no exhaustion before reset in that scenario. `accountMatch` is
-`unverified` because TokenCoffee history has no account ID; both apps must use
-the same account. Forecasts never replace the live remaining-percent stop rule.
-Claude, five-hour and additional model windows do not have forecasts.
+`verified` when the Codex or Claude login matches TokenCoffee's linked account
+identity. Both providers select the matching account automatically. Optional
+`BRRAINZTOOLS_TOKENCOFFEE_CLAUDE_ACCOUNT` and `BRRAINZTOOLS_TOKENCOFFEE_CODEX_ACCOUNT`
+restrict selection to a UUID but never override identity checks. Claude profile
+verification failure leaves live allowance available but disables forecasting.
+Only legacy Codex history remains `unverified`. Missing or ambiguous accounts do not forecast.
+`newestStoredSampleAt` describes the stored file; `latestSampleAt` describes
+matching history. `fresh_samples_do_not_match` differs from `no_recent_samples`;
+neither can be resolved by assuming that successful iCloud sync means fresh usage.
+Forecasts never replace the live remaining-percent stop rule. Five-hour, Codex
+model and legacy Claude `seven_day_*` model windows do not have forecasts.
+
 
 Start with:
 

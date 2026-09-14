@@ -76,7 +76,7 @@ final class ClaudeUsageAuthTests: XCTestCase, @unchecked Sendable {
         let fd = try lockClaudeUsageAuth(directory: directory)
         close(fd)
         let file = directory.appendingPathComponent("auth.json")
-        let original = ClaudeUsageAuthFile(claude: ClaudeUsageCredential(accessToken: "old-access", refreshToken: "old-refresh", expiresAt: 1))
+        let original = ClaudeUsageAuthFile(claude: ClaudeUsageCredential(accessToken: "old-access", refreshToken: "old-refresh", expiresAt: 1, identity: "verified-identity"))
         try writeClaudeUsageSecret(original, to: file)
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [OAuthStub.self]
@@ -87,22 +87,78 @@ final class ClaudeUsageAuthTests: XCTestCase, @unchecked Sendable {
             XCTAssertEqual(request.url, claudeUsageTokenURL)
             return (200, Data(#"{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600,"scope":"user:profile"}"#.utf8))
         }
-        let token = try await loadClaudeUsageToken(directory: directory, session: session)
-        XCTAssertEqual(token, "new-access")
+        let credential = try await loadClaudeUsageCredential(directory: directory, session: session)
+        XCTAssertEqual(credential.accessToken, "new-access")
+        XCTAssertEqual(credential.identity, "verified-identity")
         XCTAssertEqual(try readClaudeUsageSecret(ClaudeUsageAuthFile.self, from: file).claude.refreshToken, "new-refresh")
         OAuthStub.handler = { _ in XCTFail("Fresh token must not make a refresh request"); return (500, Data()) }
-        let cached = try await loadClaudeUsageToken(directory: directory, session: session)
-        XCTAssertEqual(cached, "new-access")
+        let cached = try await loadClaudeUsageCredential(directory: directory, session: session)
+        XCTAssertEqual(cached.accessToken, "new-access")
         try writeClaudeUsageSecret(original, to: file)
         let before = try Data(contentsOf: file)
         OAuthStub.handler = { _ in (429, Data("private server response must not appear in errors".utf8)) }
         do {
-            _ = try await loadClaudeUsageToken(directory: directory, session: session)
+            _ = try await loadClaudeUsageCredential(directory: directory, session: session)
             XCTFail("Expected refresh failure")
         } catch {
             XCTAssertTrue(error.localizedDescription.contains("429"))
             XCTAssertFalse(error.localizedDescription.contains("private server response"))
         }
         XCTAssertEqual(try Data(contentsOf: file), before)
+    }
+
+    func testExistingLoginDiscoversAndCachesIdentityWithoutTokenExchange() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fd = try lockClaudeUsageAuth(directory: directory)
+        close(fd)
+        let file = directory.appendingPathComponent("auth.json")
+        // Old schema has no identity; discovering it must not require relinking.
+        try Data(#"{"claude":{"accessToken":"old-access","refreshToken":"old-refresh","expiresAt":9999999999}}"#.utf8).write(to: file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [OAuthStub.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel(); OAuthStub.handler = nil }
+        OAuthStub.handler = { request in
+            XCTAssertEqual(request.url?.path, "/api/oauth/profile")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer old-access")
+            return (200, Data(#"{"organization":{"uuid":"AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA"},"account":{"uuid":"BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB"}}"#.utf8))
+        }
+        let verified = try await loadClaudeUsageCredential(directory: directory, session: session)
+        XCTAssertEqual(verified.identity, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+        XCTAssertEqual(verified.accessToken, "old-access")
+        XCTAssertEqual(verified.refreshToken, "old-refresh")
+        OAuthStub.handler = { _ in XCTFail("Verified credential should not need another profile lookup"); return (500, Data()) }
+        let cached = try await loadClaudeUsageCredential(directory: directory, session: session)
+        XCTAssertEqual(cached.identity, verified.identity)
+    }
+
+    func testProfileFailureKeepsRotatedCredentialAndAllowsLiveUsage() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fd = try lockClaudeUsageAuth(directory: directory)
+        close(fd)
+        let file = directory.appendingPathComponent("auth.json")
+        try writeClaudeUsageSecret(ClaudeUsageAuthFile(claude: ClaudeUsageCredential(
+            accessToken: "old", refreshToken: "old", expiresAt: 1)), to: file)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [OAuthStub.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel(); OAuthStub.handler = nil }
+        OAuthStub.handler = { request in
+            if request.url == claudeUsageTokenURL {
+                return (200, Data(#"{"access_token":"new","refresh_token":"rotated","expires_in":3600,"scope":"user:profile"}"#.utf8))
+            }
+            XCTAssertEqual(try readClaudeUsageSecret(ClaudeUsageAuthFile.self, from: file).claude.refreshToken, "rotated")
+            return (503, Data("private response".utf8))
+        }
+        let usable = try await loadClaudeUsageCredential(directory: directory, session: session)
+        XCTAssertEqual(usable.accessToken, "new")
+        XCTAssertNil(usable.identity)
+        OAuthStub.handler = { _ in (200, Data(#"{"account":{"uuid":"invalid"},"organization":{"uuid":"invalid"}}"#.utf8)) }
+        let malformed = try await loadClaudeUsageCredential(directory: directory, session: session)
+        XCTAssertNil(malformed.identity)
+        XCTAssertEqual(malformed.refreshToken, "rotated")
     }
 }

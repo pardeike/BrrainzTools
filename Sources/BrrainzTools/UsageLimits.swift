@@ -15,9 +15,13 @@ Percentages describe account allowance, not token counts. Reset times are UTC.
 Each request times out after 20 seconds. Polling never opens login or permission prompts.
 Exit 0 when all requested providers succeed; exit 1 if any are unavailable.
 Provider failures remain in the JSON result on stdout, including partial results.
-Codex weekly windows include forecasts from local iCloud-synced TokenCoffee history.
-Forecast status is separate from provider status; Claude and model limits have no forecast.
+Codex and Claude weekly windows include forecasts from local iCloud-synced TokenCoffee history.
+Forecast status is separate from provider status; five-hour and legacy model fields have no forecast.
 BRRAINZTOOLS_TOKENCOFFEE_DIRECTORY overrides the TokenCoffee data directory.
+Both providers automatically select history matching their authenticated account identity.
+BRRAINZTOOLS_TOKENCOFFEE_CLAUDE_ACCOUNT and BRRAINZTOOLS_TOKENCOFFEE_CODEX_ACCOUNT
+can restrict selection to a UUID, but cannot override an identity mismatch.
+Forecast newestStoredSampleAt and latestSampleAt distinguish stored from matching data.
 """
 
 enum UsageProvider: String, CaseIterable, Sendable, Codable {
@@ -88,7 +92,10 @@ private struct UsageCredential: Decodable {
 }
 
 private func usageCredential(_ provider: UsageProvider, session: URLSession) async throws -> (token: String, account: String?) {
-    if provider == .claude { return (try await loadClaudeUsageToken(session: session), nil) }
+    if provider == .claude {
+        let credential = try await loadClaudeUsageCredential(session: session)
+        return (credential.accessToken, credential.identity)
+    }
     let home = FileManager.default.homeDirectoryForCurrentUser
     let environment = ProcessInfo.processInfo.environment
     let directory = environment["CODEX_HOME"]
@@ -132,6 +139,28 @@ private struct ClaudeWindow: Decodable {
     let locked_reason: String?
 }
 
+func usageResetDate(_ value: String) -> Date? {
+    let formatter = ISO8601DateFormatter()
+    if let date = formatter.date(from: value) { return date }
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.date(from: value)
+}
+
+private struct ClaudeScopedLimits: Decodable {
+    struct Limit: Decodable {
+        struct Scope: Decodable {
+            struct Model: Decodable { let id: String?; let display_name: String? }
+            let model: Model?
+        }
+        let kind: String?
+        let group: String?
+        let percent: Double?
+        let resets_at: String?
+        let scope: Scope?
+    }
+    let limits: [Limit]?
+}
+
 func parseUsageData(_ data: Data, provider: UsageProvider) throws -> (plan: String?, windows: [UsageWindow]) {
     var windows: [UsageWindow] = []
     var plan: String?
@@ -162,6 +191,26 @@ func parseUsageData(_ data: Data, provider: UsageProvider) throws -> (plan: Stri
             windows.append(UsageWindow(name: key, usedPercent: used,
                                        windowSeconds: key == "five_hour" ? 18000 : 604800,
                                        resetsAt: value.resets_at, resetsInSeconds: nil, lockedReason: value.locked_reason))
+        }
+        let scoped = try JSONDecoder().decode(ClaudeScopedLimits.self, from: data)
+        func text(_ value: String?) -> String? {
+            guard let clean = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !clean.isEmpty, clean.count <= 160, !clean.contains(where: { $0.isNewline }) else { return nil }
+            return clean
+        }
+        var seen = Set<String>()
+        for limit in scoped.limits ?? [] {
+            guard limit.kind == "weekly_scoped", limit.group == "weekly",
+                  let model = limit.scope?.model, let title = text(model.display_name),
+                  let used = limit.percent else { continue }
+            let name = text(model.id).map { "model:" + $0 } ?? "model-name:" + title.lowercased()
+            guard title.lowercased() != "all models", name.lowercased() != "model:all-models" else { continue }
+            guard used.isFinite, (0...100).contains(used), seen.insert(name).inserted,
+                  limit.resets_at == nil || usageResetDate(limit.resets_at!) != nil else {
+                throw UsageFailure(message: "Claude returned invalid or duplicate scoped allowance data.")
+            }
+            windows.append(UsageWindow(name: name, usedPercent: used, windowSeconds: 604800,
+                                       resetsAt: limit.resets_at, resetsInSeconds: nil, lockedReason: nil))
         }
     }
     guard !windows.isEmpty else { throw UsageFailure(message: "Provider returned no usable allowance windows.") }
@@ -206,9 +255,8 @@ func pollUsage(_ providers: [UsageProvider]) async -> UsageReport {
             }
             guard response.statusCode == 200 else { throw UsageFailure(message: usageHTTPError(response.statusCode)) }
             (plan, windows) = try parseUsageData(data, provider: provider)
-            if provider == .codex {
-                windows = addTokenCoffeeForecasts(to: windows, plan: plan, now: Date())
-            }
+            windows = addTokenCoffeeForecasts(to: windows, plan: plan, now: Date(),
+                                             provider: provider, accountIdentity: credential.account)
         } catch let error as UsageFailure {
             failure = error.message
         } catch is DecodingError {

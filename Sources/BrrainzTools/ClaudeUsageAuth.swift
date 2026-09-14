@@ -12,6 +12,7 @@ struct ClaudeUsageCredential: Codable {
     let accessToken: String
     let refreshToken: String
     let expiresAt: Double // Unix seconds
+    var identity: String? = nil
 
     func needsRefresh(now: Date = Date()) -> Bool {
         expiresAt <= now.timeIntervalSince1970 + 60
@@ -189,23 +190,57 @@ func handleClaudeUsageLogin(complete: Bool) async throws -> ClaudeUsageLoginResu
                                   instruction: "Credential saved to ~/.brrainztools/auth.json. Run 'brrainztools usage claude'.")
 }
 
-func loadClaudeUsageToken(directory: URL = claudeUsageAuthDirectory(), session: URLSession) async throws -> String {
+func loadClaudeUsageCredential(directory: URL = claudeUsageAuthDirectory(), session: URLSession) async throws -> ClaudeUsageCredential {
     let fd = try lockClaudeUsageAuth(directory: directory)
     defer { close(fd) }
     let url = directory.appendingPathComponent("auth.json")
     guard FileManager.default.fileExists(atPath: url.path) else {
         throw UsageFailure(message: "No file-based Claude usage login. Run 'brrainztools usage claude login'. Keychain and API keys are not used.")
     }
-    let credential = try readClaudeUsageSecret(ClaudeUsageAuthFile.self, from: url).claude
+    var credential = try readClaudeUsageSecret(ClaudeUsageAuthFile.self, from: url).claude
     guard !credential.accessToken.isEmpty, !credential.refreshToken.isEmpty else {
         throw UsageFailure(message: "Incomplete Claude usage credential. Run 'brrainztools usage claude login'.")
     }
-    if !credential.needsRefresh() { return credential.accessToken }
-    let response = try await exchangeClaudeUsageToken([
-        "grant_type": "refresh_token", "refresh_token": credential.refreshToken,
-        "client_id": claudeUsageClientID, "scope": "user:profile",
-    ], session: session)
-    let refreshed = try response.credential(previousRefreshToken: credential.refreshToken)
-    try writeClaudeUsageSecret(ClaudeUsageAuthFile(claude: refreshed), to: url)
-    return refreshed.accessToken
+    if credential.needsRefresh() {
+        let response = try await exchangeClaudeUsageToken([
+            "grant_type": "refresh_token", "refresh_token": credential.refreshToken,
+            "client_id": claudeUsageClientID, "scope": "user:profile",
+        ], session: session)
+        var refreshed = try response.credential(previousRefreshToken: credential.refreshToken)
+        refreshed.identity = credential.identity
+        // Persist rotating tokens before any optional profile request can fail.
+        try writeClaudeUsageSecret(ClaudeUsageAuthFile(claude: refreshed), to: url)
+        credential = refreshed
+    }
+    if credential.identity == nil {
+        // Profile failure must not hide live allowance. Without a verified
+        // identity the forecast layer refuses to select account history.
+        if let identity = try? await fetchClaudeUsageIdentity(token: credential.accessToken, session: session) {
+            credential.identity = identity
+            try writeClaudeUsageSecret(ClaudeUsageAuthFile(claude: credential), to: url)
+        }
+    }
+    return credential
+}
+
+func fetchClaudeUsageIdentity(token: String, session: URLSession) async throws -> String {
+    var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/profile")!)
+    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
+    request.setValue("brrainztools", forHTTPHeaderField: "User-Agent")
+    let (data, response) = try await session.data(for: request)
+    guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+        throw UsageFailure(message: "Claude profile identity could not be verified.")
+    }
+    struct Profile: Decodable {
+        struct Identifier: Decodable { let uuid: String }
+        let account: Identifier
+        let organization: Identifier
+    }
+    guard let profile = try? JSONDecoder().decode(Profile.self, from: data),
+          let identity = UsageHistoryContract.claudeIdentity(
+            organizationID: profile.organization.uuid, accountID: profile.account.uuid) else {
+        throw UsageFailure(message: "Claude profile identity is missing or invalid.")
+    }
+    return identity
 }

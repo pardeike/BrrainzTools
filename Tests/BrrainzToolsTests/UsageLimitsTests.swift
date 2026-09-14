@@ -60,4 +60,16 @@ final class UsageLimitsTests: XCTestCase {
                                                          windows: [], error: "Missing credential")])
         XCTAssertFalse(result.succeeded)
     }
+    func testClaudeScopedLimitsIncludeInactiveModelsAndRejectDuplicates() throws {
+        let limit = #"{"kind":"weekly_scoped","group":"weekly","percent":42,"is_active":false,"resets_at":"2026-09-20T00:00:00.123Z","scope":{"model":{"id":"fable","display_name":"Fable"}}}"#
+        let data = Data(("{\"limits\":[" + limit + "]}").utf8)
+        let result = try parseUsageData(data, provider: .claude)
+        XCTAssertEqual(result.windows.map(\.name), ["model:fable"])
+        XCTAssertEqual(result.windows[0].remainingPercent, 58)
+        XCTAssertEqual(result.windows[0].windowSeconds, 604800)
+        XCTAssertThrowsError(try parseUsageData(Data(("{\"limits\":[" + limit + "," + limit + "]}").utf8), provider: .claude))
+        XCTAssertThrowsError(try parseUsageData(Data(String(decoding: data, as: UTF8.self)
+            .replacingOccurrences(of: "42", with: "101").utf8), provider: .claude))
+    }
+
 }
