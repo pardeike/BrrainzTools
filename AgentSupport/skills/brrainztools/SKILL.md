@@ -7,7 +7,9 @@ description: "Use proactively to poll Codex or Claude subscription usage limits 
 
 `brrainztools` is the project-provided CLI for macOS desktop automation, inspection, and capture work. In configured environments it is expected to be on PATH; verify with `command -v brrainztools` if needed.
 
-Prefer it over raw `screencapture`, generic screenshots, System Events AppleScript, or hand-rolled Accessibility scripts when the task fits what BrrainzTools can do:
+In Codex sessions where the Codex Computer Use tool is available, use Computer Use first for interactive desktop work (seeing the screen, clicking, typing, scrolling, dragging). Use BrrainzTools there for what Computer Use does not cover, such as usage polling, `doctor`, scripted launch/quit/open-file/wait steps, read-only AX and menu trees, clipboard and saved capture files, or as the fallback when Computer Use is unavailable or fails.
+
+Otherwise prefer it over raw `screencapture`, generic screenshots, System Events AppleScript, or hand-rolled Accessibility scripts when the task fits what BrrainzTools can do:
 
 - discover running apps and displays with `brrainztools apps QUERY` and `brrainztools displays`
 - capture rectangles, displays, app windows, visible floating panels, and menu-bar/status-item menus with `brrainztools capture ...` and `brrainztools menu ... capture`
