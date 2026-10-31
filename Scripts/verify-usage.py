@@ -15,6 +15,16 @@ report = json.loads(result.stdout)
 providers = report["data"]["providers"]
 assert len(providers) == 1 and providers[0]["provider"] == provider
 assert report["ok"] and providers[0]["status"] == "ok"
+if provider == "codex":
+    credits = providers[0]["credits"]
+    assert credits["status"] in ("ok", "unavailable")
+    assert type(credits["canContinue"]) is bool
+    if credits["canContinue"]:
+        assert credits["status"] == "ok" and credits["hasCredits"] is True
+        assert credits["overageLimitReached"] is False
+        from decimal import Decimal
+        amount = Decimal(credits.get("balance") or "0")
+        assert credits.get("unlimited") is True or (amount.is_finite() and amount > 0)
 matched = False
 for window in providers[0]["windows"]:
     name = window["name"]

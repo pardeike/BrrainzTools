@@ -29,7 +29,7 @@ It is designed for agent use and may already be authorized for local screen capt
 
 ## Subscription allowance
 
-Proactively check your provider's subscription allowance with `brrainztools usage codex` or `brrainztools usage claude` at the start of substantial work, before spawning parallel agents, and after a usage-limit interruption. Use `brrainztools usage all` when coordinating both providers. During sustained work, check at meaningful checkpoints and at least every five minutes; when any applicable window has 5% or less remaining, check at least every minute and before starting another substantial operation. Check at the next opportunity after a blocking operation. Read `data.providers[].status` and all applicable `windows[].remainingPercent` and `resetsAt` values. As soon as any account-wide or current-model window has 1% or less remaining (99% or more used), stop substantive work immediately, interrupt your active sub-agents using that provider, and give a brief progress handoff with the reset time. Do not start more work on that provider until a fresh poll shows all applicable windows above 1%, or the user explicitly overrides this policy. Unavailable data is unknown, not unused allowance: back off on HTTP 429 and pause further substantial work if you cannot establish the remaining allowance. These are shared account percentages, not token budgets; polling cannot guarantee a reserve while other sessions consume usage.
+Proactively check provider allowance with `brrainztools usage codex` or `brrainztools usage claude` at the start of substantial work, before parallel agents, and after a usage-limit interruption. Use `brrainztools usage all` when coordinating both providers. During sustained work, poll at meaningful checkpoints and at least every five minutes. At 5% or less in any applicable window, poll at least every minute and before another substantial operation. Poll at the next opportunity after blocking work. Read `data.providers[].status`, applicable `windows[].remainingPercent` and `resetsAt`, and Codex `credits.status`, `credits.balance`, `credits.overageLimitReached`, and `credits.canContinue`. A fresh successful Codex poll with `credits.status == "ok"` and `credits.canContinue == true` permits continued work against the existing credit balance, even when account-wide `primary` or `secondary` allowance is at or below 1% or its forecast predicts exhaustion. This permission does not cover model-specific limits, provider restrictions, unknown or stale data, API billing, new credit purchases, or automatic reload. Subscription forecasts describe subscription exhaustion, not exhaustion of the credit balance. Without verified usable Codex credits, stop substantive work and affected sub-agents when any applicable window reaches 1% or less. Claude retains the same 1% stop rule. Always stop for a model-specific window at 1% or less. Resume only after a fresh poll confirms sufficient applicable allowance or usable Codex credits, or an explicit user override. If credit status is missing, malformed, restricted, zero, or negative, do not assume credit-backed continuation. Normal subscription work may continue while its allowance is sufficient. On HTTP 429, back off. If neither allowance nor credit-backed continuation can be established, pause substantial work and give a brief handoff. Never enable automatic purchases or change provider billing authentication for this policy. These are shared account allowances and credit balances, not per-agent token budgets; polling cannot reserve capacity.
 
 Output is JSON. Inspect `data.providers[].status` before using `windows[].remainingPercent` and `resetsAt`. `status: unavailable` means the allowance is unknown, not unused. Exit status is 1 if any requested provider is unavailable; stdout still contains successful providers and structured failure details. Windows are account-wide subscription percentages, not remaining tokens or a per-agent allocation. Do not infer token budgets from them. Codex uses its existing file-based login. Claude uses its own `~/.brrainztools/auth.json` credential and refreshes it automatically, without Keychain access. If Claude has no login, run `brrainztools usage claude login` to obtain a browser authorization URL; the user can authorize and run `brrainztools usage claude login --complete`, pasting code#state into stdin. Never request OAuth tokens in chat or put them in command arguments. Polling never opens browser login or permission dialogs. Do not substitute a regular API key or an inference-only setup token for the subscription usage credential.
 
@@ -46,7 +46,7 @@ Only legacy Codex history remains `unverified`. Missing or ambiguous accounts do
 `newestStoredSampleAt` describes the stored file; `latestSampleAt` describes
 matching history. `fresh_samples_do_not_match` differs from `no_recent_samples`;
 neither can be resolved by assuming that successful iCloud sync means fresh usage.
-Forecasts never replace the live remaining-percent stop rule. Five-hour, Codex
+Forecasts never replace live allowance and credit checks. Verified usable Codex credits cover account allowance exhaustion, including forecast exhaustion. They do not cover model-specific restrictions. Five-hour, Codex
 model and legacy Claude `seven_day_*` model windows do not have forecasts.
 
 
@@ -73,3 +73,16 @@ BrrainzTools is maintained by this project, not an external fixed constraint. If
 - the improvement that would make the tool more capable
 
 Do not present BrrainzTools shortcomings as unavoidable macOS facts unless verified. If you are working in this repository and the improvement is small and well-scoped, propose or implement it.
+
+
+## Codex credit contract
+
+Codex reports `credits.status`, the decimal-string `credits.balance`,
+`hasCredits`, `unlimited`, `overageLimitReached`, and derived `canContinue`.
+The tool sets `canContinue` only when the live response confirms available
+credits and no overage restriction. Missing or invalid credit data cannot permit
+continuation, but does not invalidate otherwise usable subscription allowance.
+Credit fields describe the currently authenticated account only.
+The endpoint does not expose grant expiration dates. Do not invent an expiry.
+Credits do not alter remainingPercent or subscription forecasts.
+This command does not purchase credits, enable automatic reload, or use API billing.

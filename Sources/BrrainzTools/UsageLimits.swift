@@ -12,6 +12,8 @@ The login command returns a browser URL; --complete reads code#state from stdin.
 Claude tokens refresh automatically. No Keychain access or API keys.
 Defaults to all. JSON data.providers contains status, windows, and any error.
 Percentages describe account allowance, not token counts. Reset times are UTC.
+Codex credits includes the live balance and canContinue for usable credit-backed continuation.
+Credits cover account allowance exhaustion, not model restrictions or unknown usage data.
 Each request times out after 20 seconds. Polling never opens login or permission prompts.
 Exit 0 when all requested providers succeed; exit 1 if any are unavailable.
 Provider failures remain in the JSON result on stdout, including partial results.
@@ -69,6 +71,7 @@ struct ProviderUsage: Encodable {
     let plan: String?
     let windows: [UsageWindow]
     let error: String?
+    var credits: UsageCredits? = nil
 }
 
 struct UsageReport: Encodable {
@@ -110,6 +113,56 @@ private func usageCredential(_ provider: UsageProvider, session: URLSession) asy
         }
     }
     throw UsageFailure(message: "No readable Codex OAuth credential. Run 'codex login'.")
+}
+
+struct UsageCredits: Encodable {
+    let status: String
+    let hasCredits: Bool?
+    let unlimited: Bool?
+    let balance: String?
+    let overageLimitReached: Bool?
+
+    var canContinue: Bool {
+        guard status == "ok", hasCredits == true, overageLimitReached == false else { return false }
+        if unlimited == true { return true }
+        guard let balance, let amount = Double(balance), amount.isFinite else { return false }
+        return amount > 0
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status, hasCredits, unlimited, balance, overageLimitReached, canContinue
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(hasCredits, forKey: .hasCredits)
+        try container.encodeIfPresent(unlimited, forKey: .unlimited)
+        try container.encodeIfPresent(balance, forKey: .balance)
+        try container.encodeIfPresent(overageLimitReached, forKey: .overageLimitReached)
+        try container.encode(canContinue, forKey: .canContinue)
+    }
+}
+
+func parseCodexCredits(_ data: Data) -> UsageCredits {
+    struct Response: Decodable {
+        struct Credits: Decodable {
+            let has_credits: Bool?
+            let unlimited: Bool?
+            let balance: String?
+            let overage_limit_reached: Bool?
+        }
+        let credits: Credits?
+    }
+    guard let response = try? JSONDecoder().decode(Response.self, from: data),
+          let credits = response.credits else {
+        return UsageCredits(status: "unavailable", hasCredits: nil, unlimited: nil,
+                            balance: nil, overageLimitReached: nil)
+    }
+    return UsageCredits(status: credits.has_credits != nil && credits.overage_limit_reached != nil
+                        ? "ok" : "unavailable",
+                        hasCredits: credits.has_credits, unlimited: credits.unlimited,
+                        balance: credits.balance, overageLimitReached: credits.overage_limit_reached)
 }
 
 private struct CodexUsage: Decodable {
@@ -237,6 +290,7 @@ func pollUsage(_ providers: [UsageProvider]) async -> UsageReport {
         var plan: String?
         var windows: [UsageWindow] = []
         var failure: String?
+        var credits: UsageCredits?
         do {
             let credential = try await usageCredential(provider, session: session)
             var request = URLRequest(url: provider.endpoint)
@@ -255,6 +309,7 @@ func pollUsage(_ providers: [UsageProvider]) async -> UsageReport {
             }
             guard response.statusCode == 200 else { throw UsageFailure(message: usageHTTPError(response.statusCode)) }
             (plan, windows) = try parseUsageData(data, provider: provider)
+            if provider == .codex { credits = parseCodexCredits(data) }
             windows = addTokenCoffeeForecasts(to: windows, plan: plan, now: Date(),
                                              provider: provider, accountIdentity: credential.account)
         } catch let error as UsageFailure {
@@ -270,7 +325,7 @@ func pollUsage(_ providers: [UsageProvider]) async -> UsageReport {
         results.append(ProviderUsage(provider: provider, source: provider.endpoint,
                                      checkedAt: ISO8601DateFormatter().string(from: Date()),
                                      status: failure == nil ? "ok" : "unavailable",
-                                     plan: plan, windows: windows, error: failure))
+                                     plan: plan, windows: windows, error: failure, credits: credits))
     }
     return UsageReport(providers: results)
 }

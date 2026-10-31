@@ -72,4 +72,38 @@ final class UsageLimitsTests: XCTestCase {
             .replacingOccurrences(of: "42", with: "101").utf8), provider: .claude))
     }
 
+    func testCodexCreditContinuationRequiresVerifiedUsableBalance() throws {
+        let valid = Data(#"{"credits":{"has_credits":true,"unlimited":false,"overage_limit_reached":false,"balance":"62499.10895"}}"#.utf8)
+        let credits = parseCodexCredits(valid)
+        XCTAssertEqual(credits.status, "ok")
+        XCTAssertEqual(credits.balance, "62499.10895")
+        XCTAssertTrue(credits.canContinue)
+        for body in [
+            #"{}"#,
+            #"{"credits":null}"#,
+            #"{"credits":{"has_credits":true,"unlimited":false,"balance":"20"}}"#,
+            #"{"credits":{"has_credits":true,"overage_limit_reached":true,"balance":"20"}}"#,
+            #"{"credits":{"has_credits":false,"overage_limit_reached":false,"balance":"20"}}"#,
+            #"{"credits":{"has_credits":true,"overage_limit_reached":false,"balance":"0"}}"#,
+            #"{"credits":{"has_credits":true,"overage_limit_reached":false,"balance":"-1"}}"#,
+            #"{"credits":{"has_credits":true,"overage_limit_reached":false,"balance":"NaN"}}"#,
+            #"{"credits":{"has_credits":true,"overage_limit_reached":false,"balance":true}}"#
+        ] {
+            XCTAssertFalse(parseCodexCredits(Data(body.utf8)).canContinue, body)
+        }
+        let unlimited = Data(#"{"credits":{"has_credits":true,"unlimited":true,"overage_limit_reached":false}}"#.utf8)
+        XCTAssertTrue(parseCodexCredits(unlimited).canContinue)
+    }
+
+    func testCreditStatusIsIncludedWithoutChangingAllowanceWindows() throws {
+        let data = Data(#"{"rate_limit":{"primary_window":{"used_percent":100}},"credits":{"has_credits":true,"unlimited":false,"overage_limit_reached":false,"balance":"20"}}"#.utf8)
+        let result = try parseUsageData(data, provider: .codex)
+        XCTAssertEqual(result.windows[0].remainingPercent, 0)
+        let report = ProviderUsage(provider: .codex, source: UsageProvider.codex.endpoint,
+            checkedAt: "now", status: "ok", plan: nil, windows: result.windows, error: nil,
+            credits: parseCodexCredits(data))
+        let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(report)) as! [String: Any]
+        XCTAssertEqual((encoded["credits"] as? [String: Any])?["canContinue"] as? Bool, true)
+    }
+
 }
